@@ -172,7 +172,9 @@ Ainda não existem resultados. Os dados e os gráficos ficarão em [`results/`](
 ## Progresso
 
 - [ ] Fase 1: ambiente, topologia e proposta
-Diagrama da Redes
+
+- Diagrama da Rede
+
 <img width="2000" height="964" alt="image" src="https://github.com/user-attachments/assets/2fcaa7cf-1bf4-4521-bb13-58d4a0639cfe" />
 
 | Elemento | Descrição |
