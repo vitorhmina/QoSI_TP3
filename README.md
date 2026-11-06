@@ -172,6 +172,17 @@ Ainda não existem resultados. Os dados e os gráficos ficarão em [`results/`](
 ## Progresso
 
 - [ ] Fase 1: ambiente, topologia e proposta
+Diagrama da Redes
+<img width="2000" height="964" alt="image" src="https://github.com/user-attachments/assets/2fcaa7cf-1bf4-4521-bb13-58d4a0639cfe" />
+
+Descrição de cada elemento:
+r1, r2	                    -> Hosts do Mininet com encaminhamento IP ativo
+s1, s2	                    -> Switches virtuais Open vSwitch
+VNFs	                    -> Contentores Docker
+Servidores, clientes e atk	-> Hosts emulados
+Ligações	                -> Pares de interfaces virtuais (veth), com débito e atraso definidos por software
+
+
 - [ ] Fase 2: implementação e teste individual das VNFs
 - [ ] Fase 3: integração, testes e otimização
 - [ ] Fase 4: experiências, análise e relatório final
