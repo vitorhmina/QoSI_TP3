@@ -176,6 +176,7 @@ Diagrama da Redes
 <img width="2000" height="964" alt="image" src="https://github.com/user-attachments/assets/2fcaa7cf-1bf4-4521-bb13-58d4a0639cfe" />
 
 | Elemento | Descrição |
+| --- | --- |
 | r1,r2 | Hosts do Mininet com encaminhamento IP ativo | 
 |s1, s2 | Switches virtuais Open vSwitch |
 | VNFs | Contentores Docker |
