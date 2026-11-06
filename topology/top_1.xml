@@ -1,0 +1,188 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<scenario name="qosi_tp3_topology">
+  <networks>
+    <network id="4" name="sw1" icon="" canvas="1" type="SWITCH">
+      <position x="130" y="250"/>
+    </network>
+    <network id="11" name="sw2" icon="" canvas="1" type="SWITCH">
+      <position x="770" y="250"/>
+    </network>
+  </networks>
+  <devices>
+    <device id="1" name="voip_src" icon="" canvas="1" type="PC" class="" image="">
+      <position x="50" y="120"/>
+      <services><service name="DefaultRoute"/></services>
+    </device>
+    <device id="2" name="video_src" icon="" canvas="1" type="PC" class="" image="">
+      <position x="50" y="250"/>
+      <services><service name="DefaultRoute"/></services>
+    </device>
+    <device id="3" name="bulk_src" icon="" canvas="1" type="PC" class="" image="">
+      <position x="50" y="380"/>
+      <services><service name="DefaultRoute"/></services>
+    </device>
+    <device id="5" name="r1" icon="" canvas="1" type="router" class="" image="">
+      <position x="210" y="250"/>
+      <services>
+        <service name="zebra"/>
+        <service name="OSPFv2"/>
+        <service name="IPForward"/>
+      </services>
+    </device>
+    <device id="6" name="vnf_fw" icon="" canvas="1" type="router" class="" image="">
+      <position x="300" y="120"/>
+      <services>
+        <service name="zebra"/>
+        <service name="OSPFv2"/>
+        <service name="IPForward"/>
+      </services>
+    </device>
+    <device id="7" name="vnf_class" icon="" canvas="1" type="router" class="" image="">
+      <position x="390" y="120"/>
+      <services>
+        <service name="zebra"/>
+        <service name="OSPFv2"/>
+        <service name="IPForward"/>
+      </services>
+    </device>
+    <device id="8" name="vnf_police" icon="" canvas="1" type="router" class="" image="">
+      <position x="480" y="120"/>
+      <services>
+        <service name="zebra"/>
+        <service name="OSPFv2"/>
+        <service name="IPForward"/>
+      </services>
+    </device>
+    <device id="9" name="vnf_mon" icon="" canvas="1" type="router" class="" image="">
+      <position x="570" y="120"/>
+      <services>
+        <service name="zebra"/>
+        <service name="OSPFv2"/>
+        <service name="IPForward"/>
+      </services>
+    </device>
+    <device id="10" name="r_core" icon="" canvas="1" type="router" class="" image="">
+      <position x="680" y="250"/>
+      <services>
+        <service name="zebra"/>
+        <service name="OSPFv2"/>
+        <service name="IPForward"/>
+      </services>
+    </device>
+    <device id="12" name="voip_c" icon="" canvas="1" type="PC" class="" image="">
+      <position x="880" y="120"/>
+      <services><service name="DefaultRoute"/></services>
+    </device>
+    <device id="13" name="video_c" icon="" canvas="1" type="PC" class="" image="">
+      <position x="880" y="250"/>
+      <services><service name="DefaultRoute"/></services>
+    </device>
+    <device id="14" name="bulk_c" icon="" canvas="1" type="PC" class="" image="">
+      <position x="880" y="380"/>
+      <services><service name="DefaultRoute"/></services>
+    </device>
+  </devices>
+  <links>
+    <link node1="1" node2="4">
+      <iface1 id="0" name="eth0" ip4="10.0.1.10" ip4_mask="24"/>
+      <options delay="0" bandwidth="100000000" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
+    </link>
+    <link node1="2" node2="4">
+      <iface1 id="0" name="eth0" ip4="10.0.1.11" ip4_mask="24"/>
+      <options delay="0" bandwidth="100000000" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
+    </link>
+    <link node1="3" node2="4">
+      <iface1 id="0" name="eth0" ip4="10.0.1.12" ip4_mask="24"/>
+      <options delay="0" bandwidth="100000000" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
+    </link>
+    <link node1="4" node2="5">
+      <iface2 id="0" name="eth0" ip4="10.0.1.1" ip4_mask="24"/>
+      <options delay="0" bandwidth="100000000" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
+    </link>
+    <link node1="5" node2="6">
+      <iface1 id="1" name="eth1" ip4="10.0.10.1" ip4_mask="30"/>
+      <iface2 id="0" name="eth0" ip4="10.0.10.2" ip4_mask="30"/>
+      <options delay="1000" bandwidth="100000000" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
+    </link>
+    <link node1="6" node2="7">
+      <iface1 id="1" name="eth1" ip4="10.0.11.1" ip4_mask="30"/>
+      <iface2 id="0" name="eth0" ip4="10.0.11.2" ip4_mask="30"/>
+      <options delay="1000" bandwidth="100000000" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
+    </link>
+    <link node1="7" node2="8">
+      <iface1 id="1" name="eth1" ip4="10.0.12.1" ip4_mask="30"/>
+      <iface2 id="0" name="eth0" ip4="10.0.12.2" ip4_mask="30"/>
+      <options delay="1000" bandwidth="100000000" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
+    </link>
+    <link node1="8" node2="9">
+      <iface1 id="1" name="eth1" ip4="10.0.13.1" ip4_mask="30"/>
+      <iface2 id="0" name="eth0" ip4="10.0.13.2" ip4_mask="30"/>
+      <options delay="1000" bandwidth="100000000" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
+    </link>
+    <link node1="9" node2="10">
+      <iface1 id="1" name="eth1" ip4="10.0.14.1" ip4_mask="30"/>
+      <iface2 id="0" name="eth0" ip4="10.0.14.2" ip4_mask="30"/>
+      <options delay="10000" bandwidth="10000000" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
+    </link>
+    <link node1="5" node2="10">
+      <iface1 id="2" name="eth2" ip4="10.0.30.1" ip4_mask="30"/>
+      <iface2 id="1" name="eth1" ip4="10.0.30.2" ip4_mask="30"/>
+      <options delay="14000" bandwidth="10000000" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
+    </link>
+    <link node1="10" node2="11">
+      <iface1 id="2" name="eth2" ip4="10.0.9.1" ip4_mask="24"/>
+      <options delay="0" bandwidth="100000000" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
+    </link>
+    <link node1="11" node2="12">
+      <iface2 id="0" name="eth0" ip4="10.0.9.10" ip4_mask="24"/>
+      <options delay="0" bandwidth="100000000" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
+    </link>
+    <link node1="11" node2="13">
+      <iface2 id="0" name="eth0" ip4="10.0.9.11" ip4_mask="24"/>
+      <options delay="0" bandwidth="100000000" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
+    </link>
+    <link node1="11" node2="14">
+      <iface2 id="0" name="eth0" ip4="10.0.9.12" ip4_mask="24"/>
+      <options delay="0" bandwidth="100000000" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
+    </link>
+  </links>
+  <mobility_configurations/>
+  <session_origin lat="47.5791667" lon="-122.132322" alt="2.0" scale="150.0"/>
+  <session_options>
+    <configuration name="controlnet" value=""/>
+    <configuration name="controlnet0" value=""/>
+    <configuration name="controlnet1" value=""/>
+    <configuration name="controlnet2" value=""/>
+    <configuration name="controlnet3" value=""/>
+    <configuration name="controlnet_updown_script" value=""/>
+    <configuration name="enablerj45" value="1"/>
+    <configuration name="preservedir" value="0"/>
+    <configuration name="enablesdt" value="0"/>
+    <configuration name="sdturl" value="tcp://127.0.0.1:50000/"/>
+  </session_options>
+  <session_metadata>
+    <configuration name="canvas c1" value="{name {Canvas1}}"/>
+    <configuration name="global_options" value="interface_names=no ip_addresses=yes ipv6_addresses=no node_labels=yes link_labels=yes show_api=no background_images=no annotations=yes grid=yes traffic_start=0"/>
+  </session_metadata>
+  <default_services>
+    <node type="mdr">
+      <service name="zebra"/>
+      <service name="OSPFv3MDR"/>
+      <service name="IPForward"/>
+    </node>
+    <node type="PC">
+      <service name="DefaultRoute"/>
+    </node>
+    <node type="prouter"/>
+    <node type="router">
+      <service name="zebra"/>
+      <service name="OSPFv2"/>
+      <service name="OSPFv3"/>
+      <service name="IPForward"/>
+    </node>
+    <node type="host">
+      <service name="DefaultRoute"/>
+      <service name="SSH"/>
+    </node>
+  </default_services>
+</scenario>
