@@ -1,194 +1,136 @@
 # Mecanismos de QoS com VNFs
 
-Sistema de Qualidade de Serviço (QoS) construído com Funções de Rede Virtualizadas (VNFs). Numa rede emulada semelhante à de um ISP, o tráfego atravessa uma cadeia de VNFs que o classifica, limita, prioriza, filtra e monitoriza. O objetivo é medir o impacto dessa cadeia na latência, no jitter, no débito e na perda de pacotes.
+Sistema de Qualidade de Serviço (QoS) construído com Funções de Rede Virtualizadas (VNFs) numa rede emulada no **CORE**. O tráfego dos clientes atravessa uma cadeia de quatro VNFs que o filtra, classifica, limita, prioriza e monitoriza antes de chegar aos servidores. O objetivo é medir o impacto dessa cadeia na latência, no jitter, no débito e na perda de pacotes.
 
-Trabalho Prático 3 da unidade curricular **Qualidade de Serviço na Internet** da Universidade do Minho, ano letivo 2026/2027.
-
-> **Estado:** em desenvolvimento. A estrutura, os comandos e os parâmetros abaixo descrevem o plano do projeto e serão atualizados à medida que a implementação avança.
-
-## Objetivos
-
-- Virtualizar funções de QoS tradicionalmente implementadas em hardware dedicado.
-- Aplicar classificação, controlo de acessos, policiamento, agendamento e monitorização numa rede emulada.
-- Comparar as métricas de rede com e sem a cadeia de VNFs.
-- Documentar as contrapartidas de cada configuração, por exemplo entre débito total e equidade.
+Trabalho Prático 3 da unidade curricular **Qualidade de Serviço na Internet** da Universidade do Minho, ano letivo 2026/2027 — **Grupo 9**.
 
 ## Arquitetura
 
-O tráfego entra pela rede de acesso, atravessa a cadeia de serviço e segue para o núcleo da rede:
+![Diagrama lógico da rede](docs/diagrama_qos_vnf.png)
 
-```mermaid
-flowchart LR
-    C[Clientes] --> S1[Switch de acesso]
-    S1 --> V1
+Os clientes (e o atacante `atk`) estão do lado esquerdo e os servidores do lado direito. No sentido cliente → servidor o tráfego passa por:
 
-    subgraph SFC[Cadeia de serviço VNF]
-        direction LR
-        V1[Classificação] --> V2[Policiamento e agendamento]
-        V2 --> V3[Monitorização]
-        V3 --> V4[Controlo de acessos]
-    end
+| Ordem | VNF | Função | Ferramenta |
+| --- | --- | --- | --- |
+| 1 | `vnf-fw` | Controlo de acessos (bloqueia o `atk`) | `iptables` (filter, stateful) |
+| 2 | `vnf-cls` | Classificação e marcação DSCP | `iptables` (mangle, alvo DSCP) |
+| 3 | `vnf-pol` | Policiamento e agendamento | `tc` (HTB + SFQ + police) |
+| 4 | `vnf-mon` | Monitorização do débito por classe | `iptables` (contadores) + Python |
 
-    V4 --> R[Router de núcleo]
-    R --> SV[Servidores]
-    V3 -.métricas.-> P[Prometheus]
-    P --> G[Grafana]
-```
+A ligação `r2`–`s2` tem 20 Mbit/s e é o ponto de congestionamento. A ligação direta `r1`–`r2` (bypass) permite comparar a rede com e sem VNFs.
 
-### VNFs
+### Classes de tráfego (RFC 4594)
 
-| VNF | Função | Tecnologia |
+| Classe | Tráfego | Servidor | DSCP | Débito garantido / máximo | Prioridade |
+| --- | --- | --- | --- | --- | --- |
+| Tempo real | VoIP | srv-voip 10.0.20.10 | EF (46) | 2 / 2 Mbit/s (policiado) | 0 (alta) |
+| Multimédia | Vídeo | srv-video 10.0.20.20 | AF31 (26) | 10 / 19 Mbit/s | 1 |
+| Best effort | Bulk | srv-bulk 10.0.20.30 | DF (0) | 7 / 19 Mbit/s | 2 (baixa) |
+
+### Endereçamento
+
+| Segmento | Rede | Nós |
 | --- | --- | --- |
-| Classificação | Identifica o tráfego e marca o campo DSCP | Python com Scapy ou Open vSwitch |
-| Policiamento e agendamento | Limita o débito com token bucket e gere as filas por prioridade | `tc` do Linux em Docker |
-| Monitorização | Recolhe métricas de tráfego e de desempenho | sFlow, Prometheus e Grafana |
-| Controlo de acessos | Bloqueia tráfego não autorizado | `nftables` |
+| Clientes (s1) | 10.0.1.0/24 | c-voip .10 · c-video .20 · c-bulk .30 · atk .66 · r1 .1 |
+| Servidores (s2) | 10.0.20.0/24 | srv-voip .10 · srv-video .20 · srv-bulk .30 · r2 .1 |
+| Cadeia | 10.0.100.0/30 … 10.0.100.16/30 | r1 → fw → cls → pol → mon → r2 |
+| Bypass | 10.0.200.0/30 | r1 ↔ r2 |
 
-### Classes de tráfego
-
-As marcações seguem as recomendações do [RFC 4594](https://www.rfc-editor.org/rfc/rfc4594):
-
-| Classe | Exemplo | Requisito principal | DSCP | Prioridade |
-| --- | --- | --- | --- | --- |
-| Tempo real | VoIP | Baixa latência e baixo jitter | EF (46) | Alta |
-| Multimédia | Streaming de vídeo | Largura de banda elevada | AF31 (26) | Média |
-| Best effort | Transferência de dados em massa | Sem garantias | DF (0) | Baixa |
-
-## Tecnologias
-
-| Área | Ferramentas |
-| --- | --- |
-| Emulação de rede | [Containernet](https://github.com/containernet/containernet) (Mininet com suporte a Docker) e Open vSwitch |
-| VNFs | Docker, Python, Scapy, `tc` e `nftables` |
-| Geração de tráfego | `iperf3`, D-ITG e Scapy |
-| Monitorização | sFlow, Prometheus e Grafana |
-
-Todas as ferramentas são gratuitas e de código aberto.
+O encaminhamento é feito com rotas estáticas aplicadas por script (sem OSPF), para podermos escolher o caminho em cada teste.
 
 ## Estrutura do repositório
 
 ```text
 .
-├── topology/       # Definição da rede emulada
-├── vnfs/           # Uma pasta por VNF, com Dockerfile e configuração
-│   ├── classifier/
-│   ├── policer/
-│   ├── firewall/
-│   └── monitor/
-├── monitoring/     # Prometheus e dashboards do Grafana
-├── scenarios/      # Cenários de tráfego e de congestionamento
-├── scripts/        # Instalação, execução e análise
-├── results/        # Dados e gráficos das experiências
-└── docs/           # Proposta, relatórios e diagramas
+├── topology/
+│   ├── top_1.xml          # primeira versão (servidores à esquerda)
+│   └── top_2.xml          # versão atual (clientes à esquerda, com atk)
+├── scripts/
+│   ├── iniciar.sh         # prepara tudo depois do play no CORE
+│   ├── rotas.sh           # escolhe o caminho: cadeia ou bypass
+│   ├── vnf-fw.sh          # firewall        on | off | status
+│   ├── vnf-cls.sh         # classificador   on | off | status
+│   ├── vnf-pol.sh         # policer/HTB     on | off | status
+│   ├── vnf-mon.sh         # monitor         on [nome] | off | status
+│   ├── cenarios.sh        # corre os 3 cenários e gera os resultados
+│   ├── analisar.py        # tabela resumo e gráficos de comparação
+│   └── grafico_mon.py     # gráfico de débito por classe (CSV da vnf-mon)
+├── vnfs/monitor/
+│   └── monitor.py         # programa que corre dentro da vnf-mon
+├── docs/                  # diagrama, Gantt, prints e documento de ponto de situação
+└── results/               # resultados das experiências (gerados pelos scripts)
 ```
 
 ## Como executar
 
 ### Requisitos
 
-- Máquina virtual Ubuntu 22.04 LTS, por exemplo em VirtualBox ou AWS EC2
-- [Containernet](https://github.com/containernet/containernet#installation)
-- Docker e Docker Compose
-- Python 3
+- VM Ubuntu com o [CORE](https://github.com/coreemu/core) instalado
+- `iperf3`, `tcpdump`, `iptables`, `iproute2`
+- Python 3 com matplotlib: `sudo apt install python3-matplotlib`
 
-Os comandos usam privilégios de administrador porque criam interfaces e regras de rede. Execute-os apenas dentro da máquina virtual.
+### 1. Abrir a topologia
 
-### Instalação
+No CORE: **File → Open → `topology/top_2.xml`** e carregar no **play**.
 
-Clone o repositório:
+> As rotas e as regras das VNFs perdem-se sempre que a sessão do CORE é reiniciada. Depois de cada play é preciso correr o `iniciar.sh`, e os terminais dos nós abertos antes do reinício deixam de funcionar (fechar e abrir de novo).
 
-```bash
-git clone https://github.com/<utilizador>/<repositorio>.git
-```
+### 2. Preparar a rede
 
 ```bash
-cd <repositorio>
+sudo ./scripts/iniciar.sh          # cenário 3: cadeia com as VNFs ligadas
+sudo ./scripts/iniciar.sh off      # cenário 2: cadeia com as VNFs desligadas
+sudo ./scripts/iniciar.sh bypass   # cenário 1: tráfego pelo bypass, sem VNFs
 ```
 
-Instale as ferramentas de tráfego e as dependências:
+Cada VNF também pode ser ligada, desligada ou inspecionada à parte, por exemplo `sudo ./scripts/vnf-pol.sh status`.
+
+### 3. Correr as experiências
 
 ```bash
-sudo apt install -y iperf3 d-itg python3-scapy
+sudo ./scripts/cenarios.sh final1
 ```
 
-Construa as imagens das VNFs:
+Demora cerca de 2 minutos. Corre os três cenários com o mesmo tráfego:
 
-```bash
-./scripts/build_vnfs.sh
-```
+| Tempo | Tráfego |
+| --- | --- |
+| antes | 3 pings do `atk` para verificar a firewall |
+| 0–35 s | VoIP: ping a cada 0,2 s do c-voip para o srv-voip |
+| 0–30 s | Vídeo: iperf3 UDP a 8 Mbit/s do c-video para o srv-video |
+| 5–25 s | Bulk: iperf3 TCP com 4 fluxos do c-bulk para o srv-bulk |
 
-### Execução
+Os resultados ficam em `results/final1/`:
 
-Inicie a monitorização:
+- `resumo.csv` — tabela com as métricas dos três cenários
+- `latencia_voip.png` — latência do VoIP ao longo do tempo
+- `comparacao.png` — comparação dos três cenários
+- `on/mon.png` — débito por classe medido pela vnf-mon
+- `<cenário>/` — dados brutos (ping, JSON do iperf3, CSV da vnf-mon)
 
-```bash
-docker compose -f monitoring/docker-compose.yml up -d
-```
+## Resultados preliminares (execução `final1`)
 
-Inicie a topologia e a cadeia de VNFs:
+| Métrica | Bypass | Cadeia desligada | Cadeia ligada |
+| --- | ---: | ---: | ---: |
+| atk bloqueado | não | não | **sim** |
+| VoIP RTT sem carga (ms) | 21,0 | 21,6 | 23,4 |
+| VoIP RTT médio com carga (ms) | 465,2 | 452,3 | **23,2** |
+| VoIP RTT máximo (ms) | 621,0 | 620,0 | **45,3** |
+| VoIP jitter (ms) | 13,76 | 13,30 | **2,96** |
+| Vídeo débito (Mbit/s) | 8,00 | 8,00 | 8,00 |
+| Vídeo jitter (ms) | 0,69 | 0,72 | **0,04** |
+| Vídeo perdas (%) | 0,15 | 0,16 | 0,38 |
+| Bulk débito (Mbit/s) | 8,52 | 8,89 | 6,59 |
+| Bulk retransmissões | 317 | 311 | 112 |
 
-```bash
-sudo python3 topology/topology.py
-```
-
-Num segundo terminal, execute um cenário de tráfego:
-
-```bash
-sudo ./scripts/run_scenario.sh scenarios/voip_video_bulk.yml
-```
-
-Abra o Grafana em <http://localhost:3000> para acompanhar as métricas.
-
-### Limpeza
-
-Remova a topologia e as interfaces criadas pelo Mininet:
-
-```bash
-sudo mn -c
-```
-
-Pare a monitorização:
-
-```bash
-docker compose -f monitoring/docker-compose.yml down
-```
-
-## Experiências
-
-Cada cenário é executado com e sem a cadeia de VNFs, para que os resultados possam ser comparados diretamente:
-
-| Cenário | O que varia | O que se pretende observar |
-| --- | --- | --- |
-| Referência | Rede sem VNFs nem congestionamento | Valores de base das métricas |
-| Congestionamento | Carga total acima da capacidade da ligação | Proteção do tráfego VoIP face ao tráfego em massa |
-| Cargas variáveis | Proporção entre as três classes de tráfego | Evolução da latência em função da carga |
-| Falhas | Atraso e perda introduzidos com `tc netem` | Comportamento das classes em condições degradadas |
-| Otimização | Pesos das filas e limites de débito | Equilíbrio entre débito total e equidade |
-
-## Resultados
-
-Ainda não existem resultados. Os dados e os gráficos ficarão em [`results/`](results/) e a análise completa será incluída no relatório final.
+Com a cadeia ligada a latência do VoIP com carga desce cerca de 20 vezes e o atacante é bloqueado. Atravessar a cadeia custa menos de 3 ms. As perdas ligeiramente maiores do vídeo e o débito mais baixo do bulk serão investigados na fase de otimização.
 
 ## Progresso
 
-- [ ] Fase 1: ambiente, topologia e proposta
-
-- Diagrama da Rede
-
-<img width="2000" height="964" alt="image" src="https://github.com/user-attachments/assets/2fcaa7cf-1bf4-4521-bb13-58d4a0639cfe" />
-
-| Elemento | Descrição |
-| --- | --- |
-| r1,r2 | Hosts do Mininet com encaminhamento IP ativo | 
-|s1, s2 | Switches virtuais Open vSwitch |
-| VNFs | Contentores Docker |
-| Servidores, clientes e atk | Hosts emulados |
-| Ligações | Pares de interfaces virtuais (veth), com débito e atraso definidos por software |
-
-
-- [ ] Fase 2: implementação e teste individual das VNFs
-- [ ] Fase 3: integração, testes e otimização
-- [ ] Fase 4: experiências, análise e relatório final
+- [x] Fase 1: ambiente, topologia e proposta
+- [x] Fase 2: implementação e teste individual das VNFs
+- [ ] Fase 3: integração, testes e otimização (cenários automáticos já feitos; falta otimizar e repetir)
+- [ ] Fase 4: experiências finais, análise e relatório final
 
 ## Entregas
 
@@ -205,9 +147,11 @@ Todo o tráfego é gerado num ambiente emulado e isolado. Não execute estes cen
 
 ## Autores
 
-| Nome | Número | GitHub |
-| --- | --- | --- |
-| *Nome* | *A00000* | *@utilizador* |
+| Nome | Número |
+| --- | --- |
+| Luís Lopes | PG64182 |
+| Paulo Brochado | PG64183 |
+| Vítor Mina | PG64044 |
 
 O registo das contribuições de cada elemento do grupo está disponível no [histórico de commits](../../commits).
 
@@ -217,3 +161,5 @@ O registo das contribuições de cada elemento do grupo está disponível no [hi
 - RFC 2474, [Definition of the Differentiated Services Field](https://www.rfc-editor.org/rfc/rfc2474)
 - RFC 2475, [An Architecture for Differentiated Services](https://www.rfc-editor.org/rfc/rfc2475)
 - RFC 4594, [Configuration Guidelines for DiffServ Service Classes](https://www.rfc-editor.org/rfc/rfc4594)
+- [CORE — Common Open Research Emulator](https://github.com/coreemu/core)
+- [Linux Advanced Routing & Traffic Control HOWTO](https://lartc.org)
