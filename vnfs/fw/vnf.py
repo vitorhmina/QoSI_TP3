@@ -94,3 +94,4 @@ if __name__ == "__main__":
     if len(sys.argv) != 2 or sys.argv[1] not in cmds:
         sys.exit("Usage: vnf.py on|off|status|logs")
     cmds[sys.argv[1]]()
+    
