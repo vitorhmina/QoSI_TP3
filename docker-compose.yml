@@ -1,0 +1,62 @@
+name: qosi
+
+x-vnf: &vnf
+  entrypoint: ["true"]     # CORE runs the real containers; these only trigger the build
+  restart: "no"
+
+services:
+  base:
+    <<: *vnf
+    build: ./vnfs/base
+    image: qosi-base
+
+  fw:
+    <<: *vnf
+    build:
+      context: ./vnfs/fw
+      additional_contexts:
+        qosi-base: "service:base"     # makes "FROM qosi-base" use the base build above
+    image: qosi-fw
+
+  cls:
+    <<: *vnf
+    build:
+      context: ./vnfs/cls
+      additional_contexts:
+        qosi-base: "service:base"
+    image: qosi-cls
+
+  pol:
+    <<: *vnf
+    build:
+      context: ./vnfs/pol
+      additional_contexts:
+        qosi-base: "service:base"
+    image: qosi-pol
+
+  mon:
+    <<: *vnf
+    build:
+      context: ./vnfs/mon
+      additional_contexts:
+        qosi-base: "service:base"
+    image: qosi-mon
+
+  prometheus:
+    image: prom/prometheus
+    network_mode: host                # must reach 172.31.0.2 on the host side of the veth
+    volumes:
+      - ./vnfs/mon/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana
+    network_mode: host
+    depends_on: [prometheus]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    volumes:
+      - ./vnfs/mon/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./vnfs/mon/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    restart: unless-stopped
