@@ -2,7 +2,7 @@
   "title": "QoSI - VNF chain - 2",
   "uid": "qosi-chain-2",
   "schemaVersion": 39,
-  "refresh": "5s",
+  "refresh": "1s",
   "time": { "from": "now-5m", "to": "now" },
   "panels": [
     { "id": 1, "type": "stat", "title": "Total throughput (after chain)",

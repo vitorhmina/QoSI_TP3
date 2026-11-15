@@ -2,7 +2,7 @@
   "title": "QoSI - VNF chain",
   "uid": "qosi-chain",
   "schemaVersion": 39,
-  "refresh": "5s",
+  "refresh": "1s",
   "time": { "from": "now-5m", "to": "now" },
   "panels": [
     {
