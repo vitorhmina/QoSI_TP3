@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Random traffic simulator for the QoSI chain.
-Usage: sudo python3 traffic.py [--duration 120] [--seed 1] [--atk]
+Usage: sudo python3 tests/traffic.py [--duration 120] [--seed 1] [--atk]
 Same seed = same schedule, so runs can be compared across scenarios.
 Only sends traffic the firewall whitelist allows (plus optional atk probes).
 """
 import argparse, csv, glob, json, os, random, re, subprocess, sys, threading, time
 
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PORT = "5301"
 SRV_VOIP, SRV_VIDEO, SRV_BULK = "10.0.20.10", "10.0.20.20", "10.0.20.30"
 LOCK = threading.Lock()
@@ -98,7 +99,7 @@ def main():
     if os.geteuid() != 0:
         sys.exit("Run with sudo.")
     SESSION = find_session()
-    out = a.out or f"results/traffic_seed{a.seed}"
+    out = a.out or f"{ROOT}/results/traffic_seed{a.seed}"
     os.makedirs(out, exist_ok=True)
 
     for n in ("srv-video", "srv-bulk"):          # clean start, then servers
