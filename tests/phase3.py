@@ -21,7 +21,7 @@ import run_tests as rt
 EDGE = ["c-voip", "c-video", "c-bulk", "atk", "srv-voip", "srv-video", "srv-bulk"]
 KEYS = ["rtt_avg", "rtt_p95", "rtt_max", "jitter", "voip_loss", "video_mbps",
         "video_jitter", "video_loss", "bulk_mbps", "bulk_retr"]
-COND = ["delay", "jitter", "loss", "video", "bulk_streams", "bulk_ceil", "cls_mode", "voip_interval"]
+COND = ["delay", "netem_jitter", "loss", "video", "bulk_streams", "bulk_ceil", "cls_mode", "voip_interval"]
 NO_GRAPH = ("cls_mode", "voip_interval")
 
 
@@ -127,7 +127,7 @@ def main():
             c = dict(zip(COND, vals))
             label = "_".join(f"{k}{v}" for k, v in c.items()).replace("%", "p")
             print(f"\n######## [{i}/{len(combos)}] {c}")
-            netem(c["delay"], c["jitter"], c["loss"])
+            netem(c["delay"], c["netem_jitter"], c["loss"])
             for scn in a.scenarios:
                 runs = []
                 for k in range(1, a.runs + 1):
