@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Policing/scheduling VNF: HTB shaper on eth1 with DSCP classes + live stats log.
 Usage: python3 /app/vnf.py on|off|status|logs
+Optional environment variable: BULK_CEIL (e.g. 12mbit, must be >= 9mbit), default 19mbit.
 """
+import os
 import re
 import subprocess
 import sys
@@ -10,7 +12,7 @@ import time
 LOGFILE = "/var/log/pol.log"
 IF = "eth1"            # egress toward the servers (the forward direction)
 TOTAL = "19mbit"       # just below the 20 Mbit/s bottleneck, so the queue forms here
-BULK_CEIL = TOTAL      # lower this to police bulk traffic harder
+BULK_CEIL = os.environ.get("BULK_CEIL", TOTAL)   # lower this to police bulk traffic harder
 
 # (name, classid, DSCP tos byte, rate, ceil, prio, leaf qdisc)
 CLASSES = [
@@ -59,7 +61,7 @@ def on():
     subprocess.Popen([sys.executable, "/app/vnf.py", "daemon"],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                      start_new_session=True)
-    emit(f"pol: shaping {IF} to {TOTAL} (voip prio 0, video prio 1, bulk prio 2)")
+    emit(f"pol: shaping {IF} to {TOTAL} (voip prio 0, video prio 1, bulk prio 2, bulk ceil {BULK_CEIL})")
 
 
 def read_stats():
