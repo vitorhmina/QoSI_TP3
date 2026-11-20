@@ -101,21 +101,42 @@ chmod +x vnfs/*/*.sh 2>/dev/null
 mkdir -p results && chown "$REAL_USER" results
 
 echo "== 8. Docker images and monitoring (VNFs, Prometheus, Grafana)"
-if docker info >/dev/null 2>&1 && ! ip link show docker0 >/dev/null 2>&1; then
-    # CORE can delete Docker's bridge; builds then fail with "network bridge not found"
-    if has_systemd; then systemctl restart docker; else service docker restart >/dev/null 2>&1; fi
-    sleep 2
-    ip link show docker0 >/dev/null 2>&1 && ok "docker0 bridge was missing: restarted docker" \
-        || warn "docker0 bridge missing even after restarting docker"
-fi
+build_images() {
+    # Normal case: docker compose. Builds need Docker's bridge (docker0) for internet access.
+    if ip link show docker0 >/dev/null 2>&1; then
+        docker compose build
+        return
+    fi
+    # No bridge even after a restart (Docker's bridge disabled on this machine): build the same
+    # images with the host network instead. FROM qosi-base then uses the local base image.
+    echo "no Docker bridge on this machine: building with the host network"
+    docker build --network host -t qosi-base vnfs/base || return 1
+    for v in fw cls pol mon; do
+        docker build --network host -t "qosi-$v" "vnfs/$v" || return 1
+    done
+}
+
 if docker info >/dev/null 2>&1; then
-    echo "  building the VNF images (the first time takes several minutes)..."
-    docker compose build base >/dev/null 2>&1 && docker compose build 2>&1 | tail -n 3
-    n=$(docker images --format '{{.Repository}}' | grep -c '^qosi-')
-    [ "$n" -eq 5 ] && ok "qosi images built: $n" || warn "qosi images built: $n (expected 5)"
-    docker compose up -d prometheus grafana >/dev/null 2>&1 \
+    if ! ip link show docker0 >/dev/null 2>&1; then
+        # CORE can delete Docker's bridge; restarting Docker recreates it
+        if has_systemd; then systemctl restart docker; else service docker restart >/dev/null 2>&1; fi
+        sleep 2
+        ip link show docker0 >/dev/null 2>&1 && ok "Docker bridge was missing: restarted Docker" \
+            || ok "Docker has no bridge network here: images will be built with the host network"
+    fi
+    LOG=/tmp/qosi-build.log
+    echo "  building the VNF images (the first time takes several minutes, log: $LOG)..."
+    if build_images > "$LOG" 2>&1; then
+        ok "VNF images built"
+    else
+        warn "VNF image build failed, last lines of $LOG:"
+        tail -n 15 "$LOG" | sed 's/^/         /'
+    fi
+    n=$(docker images --format '{{.Repository}}' | grep -cE '^qosi-(base|fw|cls|pol|mon)$')
+    [ "$n" -eq 5 ] && ok "qosi images present: $n/5" || warn "qosi images present: $n/5"
+    docker compose up -d >/dev/null 2>&1 \
         && ok "Prometheus (:9090) and Grafana (:3000) running" \
-        || warn "could not start Prometheus/Grafana (network?)"
+        || warn "could not start Prometheus/Grafana (sudo docker compose up -d shows why)"
 else
     warn "skipping images and monitoring: docker is not running"
 fi

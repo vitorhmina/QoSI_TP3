@@ -96,6 +96,10 @@ Needs a fresh Ubuntu 22.04 or newer (VM, or WSL 2 with systemd). One script inst
 
 ```bash
 sudo bash setup.sh             # once; safe to re-run
+
+# later, after changing a VNF's code:
+sudo docker compose build cls  # rebuild one VNF image (or no name for all)
+sudo docker compose up -d      # (re)start Prometheus and Grafana
 ```
 
 Open `topology/chain.xml` in `core-gui` and press play. That's it: traffic already goes through the VNF chain (a session hook in `chain.xml` also allows forwarding on the host).

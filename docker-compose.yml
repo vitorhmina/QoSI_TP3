@@ -4,8 +4,8 @@ name: qosi
 # base sets what they all share, and fw/cls/pol/mon take it with "extends: base":
 #   entrypoint ["true"]   -> "up" starts the container and it exits right away
 #   network_mode: none    -> it needs no Docker network
-# If a build fails with "network bridge not found", CORE deleted Docker's docker0 bridge:
-# sudo systemctl restart docker (setup.sh does this automatically).
+# If a build fails with "network bridge not found", CORE deleted Docker's bridge (docker0):
+# sudo systemctl restart docker, or rerun setup.sh, which handles it.
 
 services:
   base:
