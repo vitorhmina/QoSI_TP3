@@ -40,24 +40,72 @@ The bulk ceiling can be lowered with `BULK_CEIL` (e.g. `12mbit`) to police it ha
 
 ## ML classification
 
-Besides the rules (ICMP → VoIP, UDP → video, TCP → bulk), the classifier has an ML mode that looks at how a flow behaves instead of its protocol or ports. It watches the first 8 packets of each flow (or less if the flow is slow, after 1 s) and a scikit-learn decision tree picks the class from 13 features: protocol, packet sizes, inter-arrival times and rate. IPs and ports are not used. While a flow is being watched its packets go as best effort; after that it gets its DSCP like in rules mode.
+Besides the rules (ICMP → VoIP, UDP → video, TCP → bulk), the classifier has an ML mode that looks at how a flow behaves instead of its protocol or ports. It watches the first 8 packets of each flow (or fewer if the flow is slow, after 1 s) and a scikit-learn decision tree picks the class from 13 features: protocol, packet sizes (mean, deviation, min, max, share of small and large packets), inter-arrival times (mean, deviation, max) and rate. IPs and ports are not used. While a flow is being watched its packets go as best effort; after that it gets its DSCP like in rules mode.
 
-The mode can be switched while traffic is running, without restarting the VNF:
+### Modes
+
+The mode can be switched while traffic is running, without restarting the VNF (inside a VNF terminal, `clsmode ml` does the same):
 
 ```bash
-docker exec vnf-cls python3 /app/vnf.py mode ml        # or rules / collect
+docker exec vnf-cls python3 /app/vnf.py mode            # current mode
+docker exec vnf-cls python3 /app/vnf.py mode ml         # decision tree
+docker exec vnf-cls python3 /app/vnf.py mode rules      # protocol rules, decided on the first packet
+docker exec vnf-cls python3 /app/vnf.py mode collect    # rules, and records every flow for training
 ```
 
-The default model is trained when the image is built, on synthetic flows (RTP codecs, pings, iperf3, frame-based video, TCP uploads, QUIC-like bulk, control connections). We compared a decision tree with a random forest on 3000 flows:
+Switching clears the VNF's connection tracking, so flows that are already running are classified again in the new mode.
+
+### Model
+
+The image trains the model when it is built, on synthetic flows (RTP with several codecs, pings, iperf3, frame-based video, TCP uploads, QUIC-like bulk, control connections) plus any lab data in `vnfs/cls/ml/data/`. Each training run compares a decision tree with a random forest on a 25 % holdout and with 5-fold cross-validation:
 
 | Model | Holdout accuracy | 5-fold CV | Time per flow |
 | --- | ---: | ---: | ---: |
-| Decision tree | 99.9 % | 99.4 % ± 0.1 | ~0.17 ms |
-| Random forest | 99.9 % | 99.9 % ± 0.1 | ~10 ms |
+| Decision tree | 99.9 % | 99.4 % ± 0.1 | ~0.15 ms |
+| Random forest | 99.9 % | 99.9 % ± 0.1 | ~6–10 ms |
 
-We kept the tree: same accuracy, ~60× faster, and it can be printed as rules.
+We kept the tree: same accuracy, about 40–60× faster per flow, and it can be printed as rules (`train.py` shows it).
 
-The model can also be retrained with real traffic from the lab. In `collect` mode the VNF uses the rules but records every flow with its real class (taken from the server it goes to), and `vnf.py train` retrains with that data; the VNF loads the new model by itself. `tests/cls_accuracy.py` runs the same random traffic in rules and ML mode and compares accuracy, precision and recall per class. More details in [vnfs/cls/ml/README.md](vnfs/cls/ml/README.md) (in Portuguese).
+### Results on lab traffic
+
+`tests/cls_accuracy.py` runs the same random traffic (300 s, seed 42) in rules and in ML mode and checks every decision against the server each flow went to:
+
+| Mode | Flows | Accuracy | VoIP F1 | Video F1 | Bulk F1 | VoIP RTT avg |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Rules | 86 | 100 % | 1.00 | 1.00 | 1.00 | 21.5–22.2 ms |
+| ML | 86 | 100 % | 1.00 | 1.00 | 1.00 | 21.4–22.0 ms |
+
+In this lab each application uses a different protocol, so the rules can't get it wrong. The point is that the model matches them without looking at protocol rules, ports or addresses, and that watching the first packets of each flow doesn't cost VoIP any latency. The synthetic flows are where protocol alone isn't enough (e.g. voice and video both over UDP, video and file uploads both over TCP).
+
+### Retraining with lab traffic
+
+In `collect` mode the VNF keeps classifying with the rules and records every flow with its features and true class; `train` retrains on synthetic plus recorded flows, and the VNF loads the new model by itself:
+
+```bash
+docker exec vnf-cls python3 /app/vnf.py mode collect
+sudo python3 tests/traffic.py --duration 300
+docker exec vnf-cls python3 /app/vnf.py train
+docker exec vnf-cls python3 /app/vnf.py status          # model accuracy and live accuracy per mode
+```
+
+With 180 lab flows added to the 3000 synthetic ones, the tree classified all 43 lab flows in the holdout correctly (99.9 % overall, CV 99.7 % ± 0.3). It also shows what training data does: protocol went from a minor feature to the second most important one (importance 0.05 → 0.20), because in this lab it separates the classes perfectly.
+
+CORE recreates the container on every play, so to keep the lab data it goes into the repository, and every image build then trains on it:
+
+```bash
+docker cp vnf-cls:/var/log/cls.flows.csv vnfs/cls/ml/data/lab_$(date +%F).csv
+sudo docker compose build cls
+```
+
+### Code
+
+| File (`vnfs/cls/ml/`) | What it does |
+| --- | --- |
+| `features.py` | per-flow window (8 packets or 1 s) and the 13 features |
+| `synth.py` | synthetic flow generator, cut by the same rule the VNF uses to decide |
+| `train.py` | trains and compares the models, prints the report, confusion matrix and tree, saves `model.joblib` and `model.meta.json` |
+| `model.py` | loads the model and reloads it when the file changes |
+| `data/` | lab flows recorded in `collect` mode, used when the image is built |
 
 ## Results
 
@@ -158,7 +206,7 @@ topology/chain.xml       CORE topology
 orchestrator/qosi.py     switch path: chain | bypass
 vnfs/base/               shared base image
 vnfs/fw|cls|pol|mon/     each VNF: vnf.py, test.sh, Dockerfile
-vnfs/cls/ml/             ML classifier: features, synthetic flows, training, model loading
+vnfs/cls/ml/             ML classifier (see ML classification above) and lab training data
 tests/                   scenario runner, sweeps, random traffic, classifier accuracy
 docs/                    diagrams, Gantt, screenshots, graphs, assignment and progress report
 ```
