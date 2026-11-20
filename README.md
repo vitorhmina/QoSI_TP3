@@ -17,7 +17,7 @@ Clients and an attacker (`atk`) are on the left, servers on the right. The `r2`�
 | VNF chain | 10.0.100.0/30 … 10.0.100.16/30 | r1 → fw → cls → pol → mon → r2 |
 | Bypass | 10.0.200.0/30 | r1 ↔ r2 |
 
-Routing is static, set by the orchestrator.
+Routing is static and needs no setup: r1 and r2 get their routes from CORE's StaticRoute service in the topology, and each VNF sets its own two routes when it starts (`vnfs/base/chain-routes.sh`). Traffic goes through the chain as soon as the session starts.
 
 ## VNFs
 
@@ -99,14 +99,21 @@ sudo bash setup.sh             # once: packages, Docker, kernel modules, VNF ima
 sudo docker compose up -d      # Prometheus + Grafana
 ```
 
-Open `topology/chain.xml` in `core-gui`, press play, then:
+Open `topology/chain.xml` in `core-gui` and press play. That's it: traffic already goes through the VNF chain (a session hook in `chain.xml` also allows forwarding on the host).
+
+If a session didn't shut down cleanly, the next play can fail with "container name already in use" or "File exists". Clean up and press play again:
 
 ```bash
-sudo python3 orchestrator/qosi.py chain     # through the VNFs
-sudo python3 orchestrator/qosi.py bypass    # direct link
+sudo docker rm -f vnf-fw vnf-cls vnf-pol vnf-mon
+for i in $(ip -o link | grep -o 'beth[0-9.]*' | sort -u); do sudo ip link del $i; done
 ```
 
-The routes are lost every time the CORE session restarts, so run it again after each play. VNF containers left over from a session that didn't shut down cleanly are removed automatically on play (a session hook in `chain.xml`).
+To compare with the direct link, switch the path (the test scripts do this by themselves):
+
+```bash
+sudo python3 orchestrator/qosi.py bypass    # direct link r1 <-> r2
+sudo python3 orchestrator/qosi.py chain     # back through the VNFs
+```
 
 Each VNF is controlled the same way:
 
@@ -145,7 +152,7 @@ Results are saved in `results/<name>/` (CSV summaries, graphs and raw ping/iperf
 setup.sh                 machine setup
 docker-compose.yml       VNF image builds, Prometheus and Grafana
 topology/chain.xml       CORE topology
-orchestrator/qosi.py     routes: chain | bypass
+orchestrator/qosi.py     switch path: chain | bypass
 vnfs/base/               shared base image
 vnfs/fw|cls|pol|mon/     each VNF: vnf.py, test.sh, Dockerfile
 vnfs/cls/ml/             ML classifier: features, synthetic flows, training, model loading

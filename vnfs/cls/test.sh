@@ -13,7 +13,8 @@ r() { vcmd -c $S/$1 -- "${@:2}"; }
 docker exec vnf-cls true 2>/dev/null \
     || { echo "vnf-cls is not running: press play in CORE"; exit 1; }
 r r1 ip route get 10.0.20.10 2>/dev/null | grep -q "via 10.0.100.2" \
-    || { echo "Traffic is not going through the VNF chain: sudo python3 orchestrator/qosi.py chain"; exit 1; }
+    || { echo "Traffic is not going through the VNF chain (bypass active or routes missing):"\
+" sudo python3 orchestrator/qosi.py chain"; exit 1; }
 
 # --- helpers
 CAP=/tmp/cls_cap.txt

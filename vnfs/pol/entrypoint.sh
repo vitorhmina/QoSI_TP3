@@ -1,6 +1,7 @@
 #!/bin/bash
 # At container start: wait for CORE to create eth1, then turn the shaper on.
 touch /var/log/pol.log
+chain-routes >> /var/log/pol.log 2>&1 &   # chain routes, once CORE adds eth0/eth1
 (
   for i in $(seq 1 120); do ip link show eth1 > /dev/null 2>&1 && break; sleep 1; done
   sleep 2

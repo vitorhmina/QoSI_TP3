@@ -37,12 +37,14 @@
       <position x="78.0" y="401.0" lat="47.575521331953944" lon="-122.13127318986757" alt="2.0"/>
       <services>
         <service name="IPForward"/>
+        <service name="StaticRoute"/>
       </services>
     </device>
     <device id="12" name="r2" icon="" canvas="1" type="router" class="" image="" compose="" compose_name="">
       <position x="829.0" y="398.0" lat="47.575548602824234" lon="-122.12115366819197" alt="2.0"/>
       <services>
         <service name="IPForward"/>
+        <service name="StaticRoute"/>
       </services>
     </device>
     <device id="13" name="srv-voip" icon="" canvas="1" type="host" class="" image="" compose="" compose_name="">
@@ -128,38 +130,49 @@
       <options delay="0" bandwidth="0" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
     </link>
     <link node1="7" node2="16">
-      <iface1 id="1" name="eth1" ip4="10.0.100.1" ip4_mask="30"/>
-      <iface2 id="0" name="eth0" ip4="10.0.100.2" ip4_mask="30"/>
+      <iface1 id="1" name="eth1" mac="00:00:00:aa:00:05" ip4="10.0.100.1" ip4_mask="30"/>
+      <iface2 id="0" name="eth0" mac="00:00:00:aa:00:06" ip4="10.0.100.2" ip4_mask="30"/>
       <options delay="0" bandwidth="0" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
     </link>
     <link node1="16" node2="8">
-      <iface1 id="1" name="eth1" ip4="10.0.100.5" ip4_mask="30"/>
-      <iface2 id="0" name="eth0" ip4="10.0.100.6" ip4_mask="30"/>
+      <iface1 id="1" name="eth1" mac="00:00:00:aa:00:07" ip4="10.0.100.5" ip4_mask="30"/>
+      <iface2 id="0" name="eth0" mac="00:00:00:aa:00:08" ip4="10.0.100.6" ip4_mask="30"/>
       <options delay="0" bandwidth="0" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
     </link>
     <link node1="8" node2="9">
-      <iface1 id="1" name="eth1" ip4="10.0.100.9" ip4_mask="30"/>
-      <iface2 id="0" name="eth0" ip4="10.0.100.10" ip4_mask="30"/>
+      <iface1 id="1" name="eth1" mac="00:00:00:aa:00:09" ip4="10.0.100.9" ip4_mask="30"/>
+      <iface2 id="0" name="eth0" mac="00:00:00:aa:00:0a" ip4="10.0.100.10" ip4_mask="30"/>
       <options delay="0" bandwidth="0" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
     </link>
     <link node1="9" node2="10">
-      <iface1 id="1" name="eth1" ip4="10.0.100.13" ip4_mask="30"/>
-      <iface2 id="0" name="eth0" ip4="10.0.100.14" ip4_mask="30"/>
+      <iface1 id="1" name="eth1" mac="00:00:00:aa:00:11" ip4="10.0.100.13" ip4_mask="30"/>
+      <iface2 id="0" name="eth0" mac="00:00:00:aa:00:12" ip4="10.0.100.14" ip4_mask="30"/>
       <options delay="0" bandwidth="0" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
     </link>
     <link node1="10" node2="12">
-      <iface1 id="1" name="eth1" ip4="10.0.100.17" ip4_mask="30"/>
-      <iface2 id="0" name="eth0" ip4="10.0.100.18" ip4_mask="30"/>
+      <iface1 id="1" name="eth1" mac="00:00:00:aa:00:13" ip4="10.0.100.17" ip4_mask="30"/>
+      <iface2 id="0" name="eth0" mac="00:00:00:aa:00:14" ip4="10.0.100.18" ip4_mask="30"/>
       <options delay="0" bandwidth="0" loss="0.0" dup="0" jitter="0" unidirectional="0" buffer="0"/>
     </link>
   </links>
+  <service_configurations>
+    <service name="StaticRoute" node="7">
+      <templates>
+        <template name="staticroute.sh"><![CDATA[ip route replace 10.0.20.0/24 via 10.0.100.2]]></template>
+      </templates>
+    </service>
+    <service name="StaticRoute" node="12">
+      <templates>
+        <template name="staticroute.sh"><![CDATA[ip route replace 10.0.1.0/24 via 10.0.100.17]]></template>
+      </templates>
+    </service>
+  </service_configurations>
   <session_origin lat="47.579166412353516" lon="-122.13232421875" alt="2.0" scale="150.0"/>
   <session_hooks>
-    <hook name="remove_old_vnfs.sh" state="3">#!/bin/sh
-# Runs on the host when play is pressed, before CORE starts the containers.
-# A session that did not shut down cleanly leaves its VNF containers behind, and CORE then
-# fails with "container name is already in use". Remove them so every play starts clean.
-docker rm -f vnf-fw vnf-cls vnf-pol vnf-mon || true
+    <hook name="prepare_host.sh" state="3">#!/bin/sh
+# Runs on the host while the session starts.
+# Docker sets the host FORWARD policy to DROP, which breaks CORE links: allow forwarding.
+iptables -P FORWARD ACCEPT || true
 </hook>
   </session_hooks>
   <session_options>

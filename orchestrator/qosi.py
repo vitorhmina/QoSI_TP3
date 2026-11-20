@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Orchestrator: routes, forwarding and VNF setup.
+"""Orchestrator: switches the path between the VNF chain and the bypass link.
+The chain routes are already set by the topology (StaticRoute in chain.xml) when play is
+pressed, so this is only needed to change path; the test scripts call it themselves.
 Usage: sudo python3 orchestrator/qosi.py chain|bypass
 """
 import glob
