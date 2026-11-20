@@ -50,7 +50,7 @@ services:
 
   prometheus:
     image: prom/prometheus
-    network_mode: host                # must reach 172.31.0.2 on the host side of the veth
+    network_mode: host                # reaches the VNFs over CORE's control network (172.16.0.0/24)
     volumes:
       - ./vnfs/mon/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     restart: unless-stopped

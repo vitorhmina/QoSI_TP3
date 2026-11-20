@@ -1,6 +1,16 @@
 global:
   scrape_interval: 1s
 scrape_configs:
-  - job_name: vnf-mon
+  # Every VNF exports its metrics on :9100. Prometheus (host network) reaches them over CORE's
+  # control network 172.16.0.0/24, where each node's address is 172.16.0.<node id in chain.xml>.
+  # A VNF that is off has no exporter, so its "up" metric is 0 on the dashboard.
+  - job_name: qosi
     static_configs:
+      - targets: ["172.16.0.16:9100"]
+        labels: { vnf: fw }
+      - targets: ["172.16.0.8:9100"]
+        labels: { vnf: cls }
+      - targets: ["172.16.0.9:9100"]
+        labels: { vnf: pol }
       - targets: ["172.16.0.10:9100"]
+        labels: { vnf: mon }

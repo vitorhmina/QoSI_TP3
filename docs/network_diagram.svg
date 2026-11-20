@@ -1,0 +1,176 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 505" width="1100" height="505" font-family="Inter, Helvetica, Arial, sans-serif">
+  <defs>
+    <!-- nuvem (sub-rede) -->
+    <g id="cloud">
+      <circle cx="-16" cy="2" r="11" fill="#b9dcf5"/>
+      <circle cx="-2" cy="-5" r="14" fill="#b9dcf5"/>
+      <circle cx="15" cy="0" r="11" fill="#b9dcf5"/>
+      <rect x="-28" y="0" width="54" height="14" rx="7" fill="#b9dcf5"/>
+    </g>
+    <!-- servidor / host -->
+    <g id="host">
+      <rect x="-17" y="-26" width="34" height="52" rx="3" fill="#5f6b78"/>
+      <rect x="-12" y="-20" width="24" height="5" rx="1" fill="#c9d1d9"/>
+      <rect x="-12" y="-11" width="24" height="5" rx="1" fill="#c9d1d9"/>
+      <rect x="-12" y="-2" width="24" height="5" rx="1" fill="#c9d1d9"/>
+      <circle cx="0" cy="15" r="3" fill="#c9d1d9"/>
+    </g>
+    <!-- switch -->
+    <g id="switch">
+      <rect x="-32" y="-10" width="64" height="20" rx="3" fill="#3f6b5f"/>
+      <g fill="#cde6dd">
+        <rect x="-26" y="-4" width="6" height="8"/><rect x="-16" y="-4" width="6" height="8"/>
+        <rect x="-6" y="-4" width="6" height="8"/><rect x="4" y="-4" width="6" height="8"/>
+        <rect x="14" y="-4" width="6" height="8"/>
+      </g>
+    </g>
+    <!-- router -->
+    <g id="router">
+      <rect x="-32" y="-10" width="64" height="20" rx="3" fill="#1f3a5f"/>
+      <circle cx="-20" cy="0" r="2.5" fill="#7ee08a"/>
+      <circle cx="-12" cy="0" r="2.5" fill="#7ee08a"/>
+      <circle cx="-4" cy="0" r="2.5" fill="#f2c94c"/>
+      <rect x="6" y="-2" width="20" height="4" rx="1" fill="#8fa6c4"/>
+    </g>
+  </defs>
+
+  <rect width="1100" height="505" fill="#ffffff"/>
+
+  <text x="550" y="38" text-anchor="middle" font-size="24" font-weight="700" fill="#222">Logical network diagram: QoS with VNFs</text>
+
+  <!-- ===== Linhas ===== -->
+  <g stroke="#333" stroke-width="1.6" fill="none">
+    <!-- barramento esquerdo (clientes) -->
+    <line x1="90" y1="170" x2="520" y2="170"/>
+    <line x1="290" y1="150" x2="290" y2="170"/>
+    <line x1="360" y1="150" x2="360" y2="170"/>
+    <line x1="430" y1="150" x2="430" y2="170"/>
+    <line x1="520" y1="150" x2="520" y2="170"/>
+    <!-- barramento direito (servidores) -->
+    <line x1="630" y1="170" x2="1010" y2="170"/>
+    <line x1="630" y1="150" x2="630" y2="170"/>
+    <line x1="700" y1="150" x2="700" y2="170"/>
+    <line x1="770" y1="150" x2="770" y2="170"/>
+    <!-- s1 - r1 -->
+    <line x1="90" y1="170" x2="90" y2="300"/>
+    <!-- cadeia -->
+    <line x1="90" y1="300" x2="1010" y2="300"/>
+  </g>
+  <!-- r2 - s2 (gargalo) -->
+  <line x1="1010" y1="170" x2="1010" y2="300" stroke="#c62828" stroke-width="3"/>
+  <!-- bypass -->
+  <polyline points="90,300 90,440 1010,440 1010,300" fill="none" stroke="#555" stroke-width="1.6" stroke-dasharray="7 5"/>
+
+  <!-- ===== Lado esquerdo: clientes ===== -->
+  <use href="#switch" x="90" y="170"/>
+  <text x="90" y="150" text-anchor="middle" font-size="14" font-weight="700" fill="#222">s1</text>
+  <use href="#cloud" x="190" y="166"/>
+  <text x="190" y="198" text-anchor="middle" font-size="12" fill="#333">10.0.1.0/24</text>
+
+  <use href="#host" x="290" y="124"/>
+  <text x="290" y="78" text-anchor="middle" font-size="13" font-weight="700" fill="#222">c-voip</text>
+  <text x="290" y="93" text-anchor="middle" font-size="12" fill="#333">10.0.1.10</text>
+  <use href="#host" x="360" y="124"/>
+  <text x="360" y="78" text-anchor="middle" font-size="13" font-weight="700" fill="#222">c-video</text>
+  <text x="360" y="93" text-anchor="middle" font-size="12" fill="#333">10.0.1.20</text>
+  <use href="#host" x="430" y="124"/>
+  <text x="430" y="78" text-anchor="middle" font-size="13" font-weight="700" fill="#222">c-bulk</text>
+  <text x="430" y="93" text-anchor="middle" font-size="12" fill="#333">10.0.1.30</text>
+  <use href="#host" x="520" y="124"/>
+  <text x="520" y="78" text-anchor="middle" font-size="13" font-weight="700" fill="#c62828">atk (blocked)</text>
+  <text x="520" y="93" text-anchor="middle" font-size="12" fill="#333">10.0.1.66</text>
+
+  <text x="405" y="194" text-anchor="middle" font-size="12" font-style="italic" fill="#666">Clients (external network)</text>
+
+  <!-- ===== Lado direito: servidores ===== -->
+  <use href="#host" x="630" y="124"/>
+  <text x="630" y="78" text-anchor="middle" font-size="13" font-weight="700" fill="#222">srv-voip</text>
+  <text x="630" y="93" text-anchor="middle" font-size="12" fill="#333">10.0.20.10</text>
+  <use href="#host" x="700" y="124"/>
+  <text x="700" y="78" text-anchor="middle" font-size="13" font-weight="700" fill="#222">srv-video</text>
+  <text x="700" y="93" text-anchor="middle" font-size="12" fill="#333">10.0.20.20</text>
+  <use href="#host" x="770" y="124"/>
+  <text x="770" y="78" text-anchor="middle" font-size="13" font-weight="700" fill="#222">srv-bulk</text>
+  <text x="770" y="93" text-anchor="middle" font-size="12" fill="#333">10.0.20.30</text>
+
+  <text x="700" y="194" text-anchor="middle" font-size="12" font-style="italic" fill="#666">Servers (protected network)</text>
+
+  <use href="#cloud" x="900" y="166"/>
+  <text x="900" y="198" text-anchor="middle" font-size="12" fill="#333">10.0.20.0/24</text>
+  <use href="#switch" x="1010" y="170"/>
+  <text x="1010" y="150" text-anchor="middle" font-size="14" font-weight="700" fill="#222">s2</text>
+
+  <!-- etiquetas das ligações verticais -->
+  <text x="100" y="240" font-size="12" fill="#333">10 ms</text>
+  <text x="1020" y="240" font-size="12" font-weight="700" fill="#c62828">20 Mbit/s</text>
+
+  <!-- ===== Cadeia de serviço ===== -->
+  <rect x="150" y="222" width="800" height="130" rx="6" fill="#eef5fc" fill-opacity="0.6" stroke="#3b7dd8" stroke-width="1.4" stroke-dasharray="6 4"/>
+  <text x="550" y="244" text-anchor="middle" font-size="13" font-weight="700" fill="#2a6bc6">VNF service chain, direction of the QoS traffic (client → server) →</text>
+
+  <!-- redes /30 -->
+  <use href="#cloud" x="200" y="296"/>
+  <text x="200" y="330" text-anchor="middle" font-size="11.5" fill="#333">10.0.100.0/30</text>
+  <use href="#cloud" x="375" y="296"/>
+  <text x="375" y="330" text-anchor="middle" font-size="11.5" fill="#333">10.0.100.4/30</text>
+  <use href="#cloud" x="550" y="296"/>
+  <text x="550" y="330" text-anchor="middle" font-size="11.5" fill="#333">10.0.100.8/30</text>
+  <use href="#cloud" x="725" y="296"/>
+  <text x="725" y="330" text-anchor="middle" font-size="11.5" fill="#333">10.0.100.12/30</text>
+  <use href="#cloud" x="895" y="296"/>
+  <text x="895" y="330" text-anchor="middle" font-size="11.5" fill="#333">10.0.100.16/30</text>
+
+  <!-- vnf-fw : firewall -->
+  <g transform="translate(287,298)">
+    <rect x="-22" y="-18" width="44" height="34" rx="2" fill="#d9534f"/>
+    <g stroke="#ffffff" stroke-width="1.4">
+      <line x1="-22" y1="-7" x2="22" y2="-7"/><line x1="-22" y1="4" x2="22" y2="4"/>
+      <line x1="-8" y1="-18" x2="-8" y2="-7"/><line x1="8" y1="-18" x2="8" y2="-7"/>
+      <line x1="0" y1="-7" x2="0" y2="4"/><line x1="-14" y1="-7" x2="-14" y2="4"/><line x1="14" y1="-7" x2="14" y2="4"/>
+      <line x1="-8" y1="4" x2="-8" y2="16"/><line x1="8" y1="4" x2="8" y2="16"/>
+    </g>
+    <path d="M10 18 C 4 12, 8 6, 12 2 C 12 8, 18 8, 18 4 C 24 10, 22 18, 16 20 Z" fill="#f5a623"/>
+  </g>
+  <text x="287" y="331" text-anchor="middle" font-size="13" font-weight="700" fill="#222">vnf-fw</text>
+  <text x="287" y="346" text-anchor="middle" font-size="11.5" fill="#333">Access control</text>
+
+  <!-- vnf-cls : etiqueta -->
+  <g transform="translate(462,298)">
+    <rect x="-20" y="-20" width="40" height="40" rx="4" fill="#1f3a5f"/>
+    <path d="M-11 -11 L2 -11 L12 -1 L1 10 L-11 -2 Z" fill="#ffffff"/>
+    <circle cx="-5" cy="-5" r="2.6" fill="#1f3a5f"/>
+  </g>
+  <text x="462" y="331" text-anchor="middle" font-size="13" font-weight="700" fill="#222">vnf-cls</text>
+  <text x="462" y="346" text-anchor="middle" font-size="11.5" fill="#333">DSCP classification</text>
+
+  <!-- vnf-pol : funil -->
+  <g transform="translate(637,298)">
+    <rect x="-20" y="-20" width="40" height="40" rx="4" fill="#1f3a5f"/>
+    <path d="M-13 -12 L13 -12 L3 1 L3 12 L-3 9 L-3 1 Z" fill="#ffffff"/>
+  </g>
+  <text x="637" y="331" text-anchor="middle" font-size="13" font-weight="700" fill="#222">vnf-pol</text>
+  <text x="637" y="346" text-anchor="middle" font-size="11.5" fill="#333">Policing and scheduling</text>
+
+  <!-- vnf-mon : barras -->
+  <g transform="translate(810,298)">
+    <rect x="-20" y="-20" width="40" height="40" rx="4" fill="#1f3a5f"/>
+    <g fill="#ffffff">
+      <rect x="-12" y="3" width="5" height="9"/><rect x="-4" y="-2" width="5" height="14"/>
+      <rect x="4" y="-7" width="5" height="19"/><rect x="12" y="-12" width="0" height="0"/>
+    </g>
+    <path d="M-13 -4 L-2 -10 L4 -6 L13 -13" stroke="#ffffff" stroke-width="1.6" fill="none"/>
+  </g>
+  <text x="810" y="331" text-anchor="middle" font-size="13" font-weight="700" fill="#222">vnf-mon</text>
+  <text x="810" y="346" text-anchor="middle" font-size="11.5" fill="#333">Monitoring</text>
+
+  <!-- routers (por cima das linhas) -->
+  <use href="#router" x="90" y="300"/>
+  <text x="50" y="305" text-anchor="end" font-size="14" font-weight="700" fill="#222">r1</text>
+  <use href="#router" x="1010" y="300"/>
+  <text x="1050" y="305" font-size="14" font-weight="700" fill="#222">r2</text>
+
+  <!-- bypass -->
+  <use href="#cloud" x="550" y="436"/>
+  <text x="550" y="470" text-anchor="middle" font-size="12" fill="#333">10.0.200.0/30</text>
+  <text x="550" y="486" text-anchor="middle" font-size="12" font-weight="700" fill="#333">Bypass</text>
+</svg>

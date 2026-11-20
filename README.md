@@ -4,7 +4,7 @@ QoS system built from VNFs on an emulated network in [CORE](https://github.com/c
 
 Practical assignment 3 for Qualidade de Serviço na Internet, MSc in Informatics Engineering, University of Minho, 2026/2027 (group 9).
 
-![Logical network diagram](docs/diagrama_qos_vnf.png)
+![Logical network diagram](docs/network_diagram.svg)
 
 ## Topology
 
@@ -26,7 +26,7 @@ Routing is static and needs no setup: r1 and r2 get their routes from CORE's Sta
 | 1 | `vnf-fw` | Access control | Stateful whitelist with `iptables`, everything else dropped; allowed/dropped flows logged through NFLOG |
 | 2 | `vnf-cls` | Classification | Scapy gets new flows via NFQUEUE and decides the class, either by rules or with an ML model (see below); the decision is saved with `CONNMARK` and `iptables` sets the DSCP on the rest of the flow |
 | 3 | `vnf-pol` | Policing and scheduling | `tc` HTB at 19 Mbit/s with a guaranteed rate, ceiling and priority per class (`pfifo` for VoIP/video, `fq_codel` for bulk) |
-| 4 | `vnf-mon` | Monitoring | Counts packets per DSCP class; exports to Prometheus (`:9100`) / Grafana and writes a CSV every second |
+| 4 | `vnf-mon` | Monitoring | Counts packets per DSCP class after the chain and writes a CSV every second |
 
 The policer shapes slightly below the 20 Mbit/s link so the queue forms in `vnf-pol`, where it can be prioritised, instead of in the router.
 
@@ -123,7 +123,7 @@ docker exec vnf-pol python3 /app/vnf.py on | off | status | logs
 docker exec vnf-mon python3 /app/vnf.py on | off | status | metrics | logs
 ```
 
-Grafana is at <http://localhost:3000>.
+Grafana is at <http://localhost:3000>. Every VNF exports its own metrics to Prometheus (`:9100`, over CORE's control network), and a single dashboard shows them by QoS aspect: VNF status and bottleneck use, throughput and packets per class after the chain, firewall allowed/dropped packets and new flows, classifier marking, flows per class and ML live accuracy, and the policer's per-class rate, drops and queue backlog.
 
 ### Tests and experiments
 
@@ -156,7 +156,7 @@ vnfs/base/               shared base image
 vnfs/fw|cls|pol|mon/     each VNF: vnf.py, test.sh, Dockerfile
 vnfs/cls/ml/             ML classifier: features, synthetic flows, training, model loading
 tests/                   scenario runner, sweeps, random traffic, classifier accuracy
-docs/                    diagram, Gantt, screenshots, graphs, progress report
+docs/                    diagrams, Gantt, screenshots, graphs, assignment and progress report
 ```
 
 ## Authors

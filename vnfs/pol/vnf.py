@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Policing/scheduling VNF: HTB shaper on eth1 with DSCP classes + live stats log.
+Prometheus metrics on :9100 (per class: sent, drops, queue backlog, configured rate/ceil).
 Usage: python3 /app/vnf.py on|off|status|logs
 Optional environment variable: BULK_CEIL (e.g. 12mbit, must be >= 9mbit), default 19mbit.
 """
@@ -10,6 +11,7 @@ import sys
 import time
 
 LOGFILE = "/var/log/pol.log"
+METRICS_PORT = 9100
 IF = "eth1"            # egress toward the servers (the forward direction)
 TOTAL = "19mbit"       # just below the 20 Mbit/s bottleneck, so the queue forms here
 BULK_CEIL = os.environ.get("BULK_CEIL", TOTAL)   # lower this to police bulk traffic harder
@@ -83,7 +85,48 @@ def read_stats():
     return stats
 
 
+def bits(rate):
+    """'19mbit' -> 19000000"""
+    m = re.match(r"([\d.]+)\s*([kmg]?)", rate.lower())
+    return float(m.group(1)) * {"": 1, "k": 1e3, "m": 1e6, "g": 1e9}[m.group(2)]
+
+
+class Metrics:
+    """Read at every Prometheus scrape, straight from tc."""
+    def collect(self):
+        from prometheus_client.core import CounterMetricFamily, GaugeMetricFamily
+        stats = read_stats()
+        sent = CounterMetricFamily("qosi_pol_sent_bytes", "Bytes sent per class", labels=["traffic_class"])
+        drop = CounterMetricFamily("qosi_pol_dropped_packets", "Packets dropped per class",
+                                   labels=["traffic_class"])
+        back = GaugeMetricFamily("qosi_pol_backlog_packets", "Packets waiting in the class queue",
+                                 labels=["traffic_class"])
+        rate = GaugeMetricFamily("qosi_pol_rate_bps", "Guaranteed rate per class", labels=["traffic_class"])
+        ceil = GaugeMetricFamily("qosi_pol_ceil_bps", "Maximum rate per class", labels=["traffic_class"])
+        for name, cid, _tos, r, c, *_ in CLASSES:
+            rate.add_metric([name], bits(r))
+            ceil.add_metric([name], bits(c))
+            if cid in stats:
+                sent.add_metric([name], stats[cid][0])
+                drop.add_metric([name], stats[cid][1])
+                back.add_metric([name], stats[cid][2])
+        yield from (sent, drop, back, rate, ceil)
+
+
+def serve_metrics(collector):
+    """Prometheus endpoint on :9100, read by Prometheus over CORE's control network."""
+    from prometheus_client import REGISTRY, start_http_server
+    REGISTRY.register(collector)
+    for _ in range(20):                       # the previous daemon may still hold the port
+        try:
+            start_http_server(METRICS_PORT)
+            return
+        except OSError:
+            time.sleep(0.5)
+
+
 def daemon():
+    serve_metrics(Metrics())
     emit("pol: logger started")
     prev = read_stats()
     while True:

@@ -8,6 +8,7 @@ Modes (switchable live with `mode <name>`, no restart):
            tree (scikit-learn) trained on flow behaviour decides (logic in /app/ml)
   collect  same window, decided by the rules, and every flow is recorded with its true class
            to /var/log/cls.flows.csv to retrain the model
+Prometheus metrics on :9100 (flows and marked packets per class, mode, ML live accuracy).
 Usage: python3 /app/vnf.py on [mode] | off | status | mode [mode] | train | logs
 """
 import csv
@@ -30,6 +31,7 @@ MODEL = os.path.join(ML_DIR, "model.joblib")
 MODEL_META = os.path.join(ML_DIR, "model.meta.json")
 IN_IF = "eth0"      # only traffic coming from the client side is classified
 QUEUE = 1
+METRICS_PORT = 9100
 PENDING = 4         # mark for packets of a flow still being observed: DF, not saved in conntrack
 CLASSES = {"voip": ("EF", 46, 1), "video": ("AF31", 26, 2), "bulk": ("BE", 0, 3)}  # label, dscp, mark
 MODES = ("rules", "ml", "collect")
@@ -126,6 +128,34 @@ def flow_key(ip):
     return (str(ip.proto), ip.src, 0, ip.dst, 0)
 
 
+def marked_packets():
+    """Packets marked per class (and still observed) from the mangle DSCP rule counters."""
+    names = {mark: c for c, (_l, _d, mark) in CLASSES.items()}
+    names[PENDING] = "observing"
+    out = subprocess.run(["iptables", "-t", "mangle", "-L", "FORWARD", "-n", "-v", "-x"],
+                         capture_output=True, text=True).stdout.splitlines()[2:]
+    got = {}
+    for line in out:
+        f = line.split()
+        if len(f) > 2 and f[2] == "DSCP" and "mark match 0x" in line:
+            mark = int(line.split("mark match 0x")[1].split()[0], 16)
+            if mark in names:
+                got[names[mark]] = int(f[0])
+    return got
+
+
+def serve_metrics(collector):
+    """Prometheus endpoint on :9100, read by Prometheus over CORE's control network."""
+    from prometheus_client import REGISTRY, start_http_server
+    REGISTRY.register(collector)
+    for _ in range(20):                       # the previous daemon may still hold the port
+        try:
+            start_http_server(METRICS_PORT)
+            return
+        except OSError:
+            time.sleep(0.5)
+
+
 def record(mode, key, truth, pred, vec):
     """One row per decided flow (ml / collect): features, true class and decision."""
     from features import FEATURES
@@ -143,7 +173,7 @@ def daemon():
     from features import Flow
     from model import Model
     clf = Model(MODEL)
-    st = {"mode": None, "mtime": None, "checked": 0.0, "warned": False}
+    st = {"mode": None, "mtime": None, "checked": 0.0, "warned": False, "ml_ok": 0, "ml_wrong": 0}
     flows = {}                                         # flow key -> class (decision cache)
     pending = {}                                       # flow key -> Flow still being observed
     counts = {c: 0 for c in CLASSES}
@@ -187,7 +217,10 @@ def daemon():
             how = f"ml p={p:.2f} n={len(fl.sizes)}"
         else:
             cls, how = classify_rules(ip), f"rules n={len(fl.sizes)}"
-        record(st["mode"], key, truth_of(key), cls, vec)
+        truth = truth_of(key)
+        record(st["mode"], key, truth, cls, vec)
+        if st["mode"] == "ml" and clf.ok and truth:           # live accuracy
+            st["ml_ok" if cls == truth else "ml_wrong"] += 1
         return cls, how
 
     def handle(pkt):
@@ -229,7 +262,32 @@ def daemon():
             with open(STATS, "w") as f:
                 json.dump({c: {"flows": n} for c, n in dict(counts).items()}, f)
 
+    class Metrics:
+        """Read at every Prometheus scrape."""
+        def collect(self):
+            from prometheus_client.core import CounterMetricFamily, GaugeMetricFamily
+            f = CounterMetricFamily("qosi_cls_flows", "Flows classified per class", labels=["traffic_class"])
+            for c, n in dict(counts).items():
+                f.add_metric([c], n)
+            yield f
+            p = CounterMetricFamily("qosi_cls_marked_packets", "Packets marked per class",
+                                    labels=["traffic_class"])
+            for c, n in marked_packets().items():
+                p.add_metric([c], n)
+            yield p
+            m = GaugeMetricFamily("qosi_cls_mode", "Classifier mode (1 = active)", labels=["mode"])
+            current = read_mode()
+            for name in MODES:
+                m.add_metric([name], 1 if name == current else 0)
+            yield m
+            a = CounterMetricFamily("qosi_cls_ml_decisions", "ML decisions checked against the true class",
+                                    labels=["result"])
+            a.add_metric(["correct"], st["ml_ok"])
+            a.add_metric(["wrong"], st["ml_wrong"])
+            yield a
+
     threading.Thread(target=write_stats, daemon=True).start()
+    serve_metrics(Metrics())
     refresh(time.time())
     emit(f"cls: classifier daemon started (mode {st['mode']})")
     nfq = NetfilterQueue()
