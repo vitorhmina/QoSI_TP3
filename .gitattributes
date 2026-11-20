@@ -1,2 +1,5 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Everything in this repo runs on Linux (CORE VM / WSL): always use LF line endings, even when
+# it is checked out on Windows with core.autocrlf, otherwise bash and Python scripts break.
+* text=auto eol=lf
+*.png binary
+*.pdf binary
