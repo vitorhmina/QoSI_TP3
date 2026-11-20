@@ -3,17 +3,21 @@ name: qosi
 x-vnf: &vnf
   entrypoint: ["true"]     # CORE runs the real containers; these only trigger the build
   restart: "no"
+  network_mode: none       # no Docker network needed, so a deleted bridge cannot break "up"
 
 services:
   base:
     <<: *vnf
-    build: ./vnfs/base
+    build:
+      context: ./vnfs/base
+      network: host                   # build steps use the host network, not docker0 (CORE can delete it)
     image: qosi-base
 
   fw:
     <<: *vnf
     build:
       context: ./vnfs/fw
+      network: host
       additional_contexts:
         qosi-base: "service:base"     # makes "FROM qosi-base" use the base build above
     image: qosi-fw
@@ -22,6 +26,7 @@ services:
     <<: *vnf
     build:
       context: ./vnfs/cls
+      network: host
       additional_contexts:
         qosi-base: "service:base"
     image: qosi-cls
@@ -30,6 +35,7 @@ services:
     <<: *vnf
     build:
       context: ./vnfs/pol
+      network: host
       additional_contexts:
         qosi-base: "service:base"
     image: qosi-pol
@@ -38,6 +44,7 @@ services:
     <<: *vnf
     build:
       context: ./vnfs/mon
+      network: host
       additional_contexts:
         qosi-base: "service:base"
     image: qosi-mon
