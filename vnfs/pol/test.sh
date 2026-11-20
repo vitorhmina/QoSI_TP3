@@ -6,7 +6,7 @@ r() { vcmd -c $S/$1 -- "${@:2}"; }
 run_load() {   # run_load <label>
     r srv-video iperf3 -s -D -p 5301
     r srv-bulk  iperf3 -s -D -p 5301
-    r c-voip ping -i 0.2 -w 14 -D 10.0.20.10 > /tmp/pol_ping.txt 2>&1 &
+    r c-voip ping -s 172 -i 0.02 -w 14 -D 10.0.20.10 > /tmp/pol_ping.txt 2>&1 &   # G.711-like VoIP
     local p1=$!
     r c-video iperf3 -c 10.0.20.20 -p 5301 -u -b 8M -t 12 > /tmp/pol_video.txt 2>&1 &
     local p2=$!

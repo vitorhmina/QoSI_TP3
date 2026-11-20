@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
-"""Scenario runner: bypass / chain with VNFs off / chain with VNFs on, same load each time.
-Usage: sudo python3 tests/run_tests.py [--name NAME] [--runs N] [--scenarios bypass off on]
+"""Scenario runner: the same load through different paths/VNF sets, to measure what each adds.
+  bypass  direct r1-r2 link, no VNFs           off    chain, all VNFs off (cost of the extra hops)
+  nopol   chain, fw + cls on, policer off       on     chain, all VNFs on
+Load: VoIP (G.711-like: 200 B every 20 ms), 8 Mbit/s UDP video (HD stream), 4 TCP bulk streams
+starting 5 s later, which saturates the 20 Mbit/s bottleneck.
+Usage: sudo python3 tests/run_tests.py [--name NAME] [--runs N] [--scenarios bypass off nopol on]
 Results: results/<name>/<scenario>/run<k>/ plus summary.csv and graphs in results/<name>/
 """
 import argparse, csv, json, os, re, subprocess, sys, time
@@ -10,7 +14,16 @@ sys.path.insert(0, os.path.join(ROOT, "orchestrator"))
 import qosi
 PORT = "5301"
 DUR_PING, DUR_VIDEO, DUR_BULK, BULK_DELAY, VIDEO_BW = 35, 30, 20, 5, "8M"
-SCENARIOS = {"bypass": ("bypass", False), "off": ("chain", False), "on": ("chain", True)}
+# VoIP emulated as a G.711 call with 20 ms packetisation: 200-byte IP packets (172 B ping payload
+# + 28 B of headers), 50 per second, ~80 kbit/s
+VOIP_SIZE, VOIP_INTERVAL = "172", "0.02"
+VNFS = ("fw", "cls", "pol")
+SCENARIOS = {   # name -> (path, VNFs turned on; the others are off)
+    "bypass": ("bypass", ()),
+    "off":    ("chain", ()),
+    "nopol":  ("chain", ("fw", "cls")),
+    "on":     ("chain", VNFS),
+}
 NAN = float("nan")
 
 
@@ -31,18 +44,19 @@ def vnf(name, action):
 
 
 def run_once(scn, out):
-    mode, vnfs_on = SCENARIOS[scn]
+    mode, active = SCENARIOS[scn]
     os.makedirs(out, exist_ok=True)
     qosi.set_mode(mode)
-    for v in ("fw", "cls", "pol"):
-        vnf(v, "on" if vnfs_on else "off")
+    for v in VNFS:
+        vnf(v, "on" if v in active else "off")
     time.sleep(2)
     r = run("atk", "ping", "-c", "3", "-W", "1", "10.0.20.10")      # firewall check
     open(f"{out}/atk.txt", "w").write(r.stdout + f"\nRESULT: {'blocked' if r.returncode else 'passed'}\n")
     print("  atk ->", "blocked" if r.returncode else "passed")
     vnf("mon", "on")                                                  # resets mon.csv
     time.sleep(3)
-    procs = [start("c-voip", f"{out}/ping.txt", "ping", "-i", "0.2", "-w", str(DUR_PING), "-D", "10.0.20.10"),
+    procs = [start("c-voip", f"{out}/ping.txt", "ping", "-s", VOIP_SIZE, "-i", VOIP_INTERVAL,
+                   "-w", str(DUR_PING), "-D", "10.0.20.10"),
              start("c-video", f"{out}/video.json", "iperf3", "-c", "10.0.20.20", "-p", PORT,
                    "-u", "-b", VIDEO_BW, "-t", str(DUR_VIDEO), "-J")]
     time.sleep(BULK_DELAY)
@@ -133,7 +147,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--name", default=time.strftime("%Y%m%d_%H%M%S"))
     ap.add_argument("--runs", type=int, default=1)
-    ap.add_argument("--scenarios", nargs="+", default=["bypass", "off", "on"], choices=list(SCENARIOS))
+    ap.add_argument("--scenarios", nargs="+", default=list(SCENARIOS), choices=list(SCENARIOS))
     a = ap.parse_args()
     if os.geteuid() != 0:
         sys.exit("Run with sudo.")

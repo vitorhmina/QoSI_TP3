@@ -3,7 +3,8 @@
 Usage: sudo python3 tests/traffic.py [--duration 0] [--seed N] [--atk]
   --duration 0   run until Ctrl+C (default); Ctrl+C finishes running streams, twice = force
   --seed N       reproduce a schedule (a random seed is chosen and printed otherwise)
-  --voip-size B / --voip-interval S   VoIP probe size and spacing (default 1000 B every 10 ms)
+  --voip-size B / --voip-interval S   VoIP ping payload and spacing (default 172 B every 20 ms:
+                                      200-byte packets, 50/s, like a G.711 call)
 Load changes through random phases (calm / normal / busy / storm).
 Only sends traffic the firewall whitelist allows (plus optional atk probes).
 """
@@ -156,8 +157,8 @@ def main():
     ap.add_argument("--duration", type=int, default=0, help="seconds, 0 = until Ctrl+C")
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--atk", action="store_true", help="also send blocked probes from atk")
-    ap.add_argument("--voip-size", type=int, default=1000, help="ping payload bytes (max ~1400)")
-    ap.add_argument("--voip-interval", type=float, default=0.01, help="seconds between VoIP packets")
+    ap.add_argument("--voip-size", type=int, default=172, help="ping payload bytes (+28 B headers)")
+    ap.add_argument("--voip-interval", type=float, default=0.02, help="seconds between VoIP packets")
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
     if os.geteuid() != 0:

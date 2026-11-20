@@ -185,17 +185,19 @@ sudo bash vnfs/cls/test.sh     # rules + ml (or just: rules | ml)
 sudo bash vnfs/pol/test.sh
 sudo bash vnfs/mon/test.sh
 
-sudo python3 tests/run_tests.py --name final --runs 3        # bypass / off / on
+sudo python3 tests/run_tests.py --name final --runs 3        # bypass / off / nopol / on
 
-sudo python3 tests/phase3.py --name load --video 4M 8M 12M 16M
-sudo python3 tests/phase3.py --name wan  --delay 0ms 40ms --jitter 0ms 15ms --loss 0% 2% --scenarios off on
-sudo python3 tests/phase3.py --name tune --scenarios on --bulk-ceil 10mbit 14mbit 19mbit
+sudo python3 tests/sweep.py --name load    --video 4M 8M 12M 16M        # latency vs load
+sudo python3 tests/sweep.py --name loss    --loss 0% 1% 3% 5%            # degraded links
+sudo python3 tests/sweep.py --name wan     --delay 0ms 40ms --jitter 0ms 15ms --loss 0% 2% --scenarios off on
+sudo python3 tests/sweep.py --name policer --scenarios nopol on --video 8M 16M
+sudo python3 tests/sweep.py --name tune    --scenarios on --bulk-ceil 10mbit 14mbit 19mbit
 
 sudo python3 tests/traffic.py --duration 300 --seed 42 --atk  # random traffic
 sudo python3 tests/cls_accuracy.py --duration 300 --seed 42   # rules vs ML accuracy
 ```
 
-Results are saved in `results/<name>/` (CSV summaries, graphs and raw ping/iperf3/mon data).
+The scenarios run the same load through different setups: `bypass` (direct link, no VNFs), `off` (chain with the VNFs off, i.e. the cost of the extra hops), `nopol` (firewall and classifier on, policer off) and `on` (everything on). VoIP is emulated like a G.711 call (200-byte packets every 20 ms), video as an 8 Mbit/s HD stream and bulk as 4 TCP transfers. Results are saved in `results/<name>/` (CSV summaries, graphs and raw ping/iperf3/mon data).
 
 ## Repository
 
@@ -207,7 +209,7 @@ orchestrator/qosi.py     switch path: chain | bypass
 vnfs/base/               shared base image
 vnfs/fw|cls|pol|mon/     each VNF: vnf.py, test.sh, Dockerfile
 vnfs/cls/ml/             ML classifier (see ML classification above) and lab training data
-tests/                   scenario runner, sweeps, random traffic, classifier accuracy
+tests/                   scenario runner, parameter sweeps, random traffic, classifier accuracy
 docs/                    diagrams, Gantt, screenshots, graphs, assignment and progress report
 ```
 

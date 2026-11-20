@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Parametric chain experiments. Every option accepts several values (cross product).
+"""Parameter sweeps: the run_tests.py load under varying conditions. Every option accepts several
+values (cross product), and a graph is drawn when exactly one numeric option varies.
 Usage (sudo):
-  python3 tests/phase3.py --name load  --video 4M 8M 12M 16M
-  python3 tests/phase3.py --name loss  --loss 0% 1% 3% 5%
-  python3 tests/phase3.py --name wan   --delay 0ms 40ms --jitter 0ms 15ms --loss 0% 2% --scenarios off on
-  python3 tests/phase3.py --name tune  --scenarios on --bulk-ceil 10mbit 14mbit 19mbit
-  python3 tests/phase3.py --name cls   --scenarios on --cls-mode rules ml
+  python3 tests/sweep.py --name load    --video 4M 8M 12M 16M                    # latency vs load
+  python3 tests/sweep.py --name loss    --loss 0% 1% 3% 5%                        # degraded links
+  python3 tests/sweep.py --name wan     --delay 0ms 40ms --jitter 0ms 15ms --loss 0% 2% --scenarios off on
+  python3 tests/sweep.py --name policer --scenarios nopol on --video 8M 16M       # with/without policing
+  python3 tests/sweep.py --name tune    --scenarios on --bulk-ceil 10mbit 14mbit 19mbit
+  python3 tests/sweep.py --name cls     --scenarios on --cls-mode rules ml
 Conditions are netem on the edge nodes (both directions), so a delay of 40ms adds ~80ms of RTT.
 Nothing is asserted: each combination just records numbers for you to compare.
 """
@@ -41,9 +43,9 @@ def netem(delay, jitter, loss):
             sys.exit(f"netem failed on {n}: {r.stderr.strip()}")
 
 
-def set_vnfs(vnfs_on, c):
-    for v in ("fw", "cls", "pol"):
-        if not vnfs_on:
+def set_vnfs(active, c):
+    for v in rt.VNFS:
+        if v not in active:
             rt.vnf(v, "off")
         elif v == "cls":
             subprocess.run(["docker", "exec", "vnf-cls", "python3", "/app/vnf.py", "on", c["cls_mode"]],
@@ -56,16 +58,16 @@ def set_vnfs(vnfs_on, c):
 
 
 def one_run(scn, out, c):
-    mode, vnfs_on = rt.SCENARIOS[scn]
+    mode, active = rt.SCENARIOS[scn]
     os.makedirs(out, exist_ok=True)
     qosi.set_mode(mode)
-    set_vnfs(vnfs_on, c)
+    set_vnfs(active, c)
     time.sleep(2)
     with open(f"{out}/atk.txt", "w") as f:           # the firewall is not under test here
         f.write("RESULT: n/a\n")
     rt.vnf("mon", "on")                               # resets mon.csv
     time.sleep(3)
-    procs = [rt.start("c-voip", f"{out}/ping.txt", "ping", "-i", c["voip_interval"],
+    procs = [rt.start("c-voip", f"{out}/ping.txt", "ping", "-s", rt.VOIP_SIZE, "-i", c["voip_interval"],
                       "-w", str(rt.DUR_PING), "-D", "10.0.20.10"),
              rt.start("c-video", f"{out}/video.json", "iperf3", "-c", "10.0.20.20", "-p", rt.PORT,
                       "-u", "-b", c["video"], "-t", str(rt.DUR_VIDEO), "-J")]
@@ -85,7 +87,7 @@ def num(x):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--name", default=time.strftime("p3_%Y%m%d_%H%M%S"))
+    ap.add_argument("--name", default=time.strftime("sweep_%Y%m%d_%H%M%S"))
     ap.add_argument("--scenarios", nargs="+", default=["bypass", "off", "on"], choices=list(rt.SCENARIOS))
     ap.add_argument("--runs", type=int, default=1)
     ap.add_argument("--delay", nargs="+", default=["0ms"], help="netem delay per direction, e.g. 40ms")
@@ -97,8 +99,8 @@ def main():
                     help="policer ceiling for bulk (>= 9mbit); only affects the 'on' scenario")
     ap.add_argument("--cls-mode", nargs="+", default=["rules"], choices=["rules", "ml", "collect"], dest="cls_mode",
                     help="classifier mode; only affects the 'on' scenario")
-    ap.add_argument("--voip-interval", nargs="+", default=["0.2"], dest="voip_interval",
-                    help="seconds between VoIP pings (0.01 = ~100 packets/s)")
+    ap.add_argument("--voip-interval", nargs="+", default=[rt.VOIP_INTERVAL], dest="voip_interval",
+                    help="seconds between VoIP packets (default 0.02 = 50 packets/s, like G.711)")
     ap.add_argument("--duration", type=int, default=0, help="video length in s (default: keep 30)")
     a = ap.parse_args()
     if os.geteuid() != 0:

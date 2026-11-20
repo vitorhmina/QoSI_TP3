@@ -8,7 +8,7 @@ sleep 3
 
 r srv-video iperf3 -s -D -p 5301
 r srv-bulk  iperf3 -s -D -p 5301
-r c-voip  ping -i 0.2 -w 6 10.0.20.10 > /dev/null 2>&1 &
+r c-voip  ping -s 172 -i 0.02 -w 6 10.0.20.10 > /dev/null 2>&1 &   # G.711-like VoIP
 r c-video iperf3 -c 10.0.20.20 -p 5301 -u -b 4M -t 6 > /dev/null 2>&1 &
 r c-bulk  iperf3 -c 10.0.20.30 -p 5301 -t 6 > /dev/null 2>&1 &
 wait
