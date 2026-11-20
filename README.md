@@ -92,11 +92,10 @@ Single runs; use `--runs N` to average several.
 
 ## How to run
 
-Needs Ubuntu (VM, or WSL 2 with systemd) with CORE installed. `setup.sh` installs the rest (Docker, Compose, iperf3, tcpdump, matplotlib).
+Needs a fresh Ubuntu 22.04 or newer (VM, or WSL 2 with systemd). One script installs and sets up everything: CORE 9.2.1, Docker and Compose, iperf3, tcpdump, the kernel modules, the VNF images, and Prometheus and Grafana.
 
 ```bash
-sudo bash setup.sh             # once: packages, Docker, kernel modules, VNF images
-sudo docker compose up -d      # Prometheus + Grafana
+sudo bash setup.sh             # once; safe to re-run
 ```
 
 Open `topology/chain.xml` in `core-gui` and press play. That's it: traffic already goes through the VNF chain (a session hook in `chain.xml` also allows forwarding on the host).
