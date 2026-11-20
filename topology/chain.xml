@@ -154,6 +154,14 @@
     </link>
   </links>
   <session_origin lat="47.579166412353516" lon="-122.13232421875" alt="2.0" scale="150.0"/>
+  <session_hooks>
+    <hook name="remove_old_vnfs.sh" state="3">#!/bin/sh
+# Runs on the host when play is pressed, before CORE starts the containers.
+# A session that did not shut down cleanly leaves its VNF containers behind, and CORE then
+# fails with "container name is already in use". Remove them so every play starts clean.
+docker rm -f vnf-fw vnf-cls vnf-pol vnf-mon || true
+</hook>
+  </session_hooks>
   <session_options>
     <configuration name="controlnet" value="172.16.0.0/24"/>
     <configuration name="controlnet0" value=""/>

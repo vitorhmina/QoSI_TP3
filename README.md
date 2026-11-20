@@ -106,7 +106,7 @@ sudo python3 orchestrator/qosi.py chain     # through the VNFs
 sudo python3 orchestrator/qosi.py bypass    # direct link
 ```
 
-The routes are lost every time the CORE session restarts, so run it again after each play. If CORE says a name like `vnf-fw` is already in use, remove the old containers (`sudo docker rm -f vnf-fw vnf-cls vnf-pol vnf-mon`) and press play again.
+The routes are lost every time the CORE session restarts, so run it again after each play. VNF containers left over from a session that didn't shut down cleanly are removed automatically on play (a session hook in `chain.xml`).
 
 Each VNF is controlled the same way:
 
