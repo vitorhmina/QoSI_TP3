@@ -107,7 +107,6 @@ def main():
         rt.DUR_VIDEO, rt.DUR_PING, rt.DUR_BULK = a.duration, a.duration + 5, max(5, a.duration - 10)
 
     qosi.SESSION = qosi.find_session()
-    qosi.prepare()
     base = f"{ROOT}/results/{a.name}"
     os.makedirs(base, exist_ok=True)
     for n in ("srv-video", "srv-bulk"):

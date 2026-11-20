@@ -138,7 +138,6 @@ def main():
     if os.geteuid() != 0:
         sys.exit("Run with sudo.")
     qosi.SESSION = qosi.find_session()
-    qosi.prepare()
     base = f"{ROOT}/results/{a.name}"
     os.makedirs(base, exist_ok=True)
     for n in ("srv-video", "srv-bulk"):

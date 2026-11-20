@@ -58,7 +58,7 @@ for m in $MODS; do
 done
 
 echo "== 5. Host forwarding policy (Docker sets FORWARD to DROP, which breaks CORE links)"
-iptables -P FORWARD ACCEPT && ok "FORWARD policy ACCEPT (the orchestrator reapplies it)"
+iptables -P FORWARD ACCEPT && ok "FORWARD policy ACCEPT (the topology sets it again on every play)"
 
 echo "== 6. Repo files"
 find . -path ./.git -prune -o -type f \( -name '*.sh' -o -name '*.py' -o -name '*.yml' -o -name '*.json' -o -name Dockerfile \) \
@@ -91,7 +91,7 @@ cat <<'EOF'
 Next steps:
   1. Log out and back in (or 'newgrp docker') so the docker group applies.
   2. sudo docker compose up -d                 # Prometheus + Grafana
-  3. Open topology/chain.xml in core-gui and press play
-  4. sudo python3 orchestrator/qosi.py chain
-  5. sudo bash vnfs/mon/connect.sh             # prints: exporter: 200
+  3. Open topology/chain.xml in core-gui and press play (the chain is ready, no other command)
+  4. sudo bash vnfs/cls/test.sh                # quick check that traffic goes through the chain
+  5. Grafana: http://localhost:3000
 EOF
