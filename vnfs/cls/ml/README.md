@@ -12,7 +12,7 @@ Modo extra do classificador: em vez de decidir pela regra de protocolo/porta no 
 
 Teste do modo ML (faz parte do teste da VNF): `sudo bash vnfs/cls/test.sh ml` (ou sem argumento para regras + ML).
 
-O modelo por omissão é treinado quando a imagem é construída (`docker compose build`). A árvore é o modelo por omissão: tem a mesma exatidão que a random forest e é ~75× mais rápida por fluxo; `python3 train.py --model forest` usa a floresta.
+O modelo por omissão é treinado quando a imagem é construída (`docker compose build`). A árvore é o modelo por omissão: tem a mesma exatidão que a random forest e é ~60× mais rápida por fluxo; `python3 train.py --model forest` usa a floresta.
 
 ## Modos e troca em tempo real
 
