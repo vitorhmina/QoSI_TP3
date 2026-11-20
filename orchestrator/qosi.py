@@ -26,7 +26,10 @@ def run_in(node, *cmd):
         full = ["docker", "exec", node, *cmd]
     else:
         full = ["vcmd", "-c", f"{SESSION}/{node}", "--", *cmd]
-    return subprocess.run(full, check=True, capture_output=True, text=True).stdout
+    r = subprocess.run(full, capture_output=True, text=True)
+    if r.returncode:
+        sys.exit(f"Failed on {node}: {' '.join(cmd)}\n{(r.stderr or r.stdout).strip()}")
+    return r.stdout
 
 
 def route(node, dest, via):
