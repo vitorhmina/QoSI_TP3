@@ -1,5 +1,9 @@
 #!/bin/bash
-# Isolated test of the classifier VNF. Run with: sudo bash vnfs/cls/test.sh
+# Isolated test of the classifier VNF. Run with: sudo bash vnfs/cls/test.sh [all|rules|ml]
+#   rules  the class is decided on the first packet of each flow
+#   ml     model loaded, live switch from rules (same daemon), BE while observed, class after it
+WHAT=${1:-all}
+case $WHAT in all|rules|ml) ;; *) echo "Usage: sudo bash vnfs/cls/test.sh [all|rules|ml]"; exit 1;; esac
 
 # --- checks that traffic can go through vnf-cls before testing anything
 [ "$(id -u)" -eq 0 ] || { echo "Run with sudo"; exit 1; }
@@ -26,21 +30,56 @@ capture() {   # capture <packets> <tcpdump filter> <traffic command...>  -> TOS 
 check() {     # check <description> <expected tos> <got tos>
     [ "$3" = "$2" ] && echo "OK   $1 (tos $3)" || echo "FAIL $1 (expected $2, got ${3:-nothing})"
 }
+ok()   { echo "OK   $*"; }
+fail() { echo "FAIL $*"; }
 
-# --- rules: the class is decided on the first packet of each flow
 docker exec vnf-cls python3 /app/vnf.py on rules > /dev/null
 r srv-video iperf3 -s -D -p 5301
 r srv-bulk  iperf3 -s -D -p 5301
 
-capture 1 "icmp and src 10.0.1.10" r c-voip ping -c 3 -W 1 10.0.20.10
-check "voip  ICMP  -> EF" 0xb8 "${TOS[0]}"
-capture 1 "icmp and src 10.0.1.10" r c-voip ping -c 3 -W 1 -Q 0x20 10.0.20.10
-check "voip  client-set CS1 is overwritten -> EF" 0xb8 "${TOS[0]}"
-capture 1 "udp and dst port 5301" r c-video iperf3 -c 10.0.20.20 -p 5301 -u -b 1M -t 2
-check "video UDP   -> AF31" 0x68 "${TOS[0]}"
-capture 1 "tcp and dst port 5301 and src 10.0.1.30" r c-bulk iperf3 -c 10.0.20.30 -p 5301 -t 2
-check "bulk  TCP   -> BE" 0x0 "${TOS[0]}"
+# --- rules: the class is decided on the first packet of each flow
+if [ "$WHAT" != ml ]; then
+    echo "--- rules"
+    capture 1 "icmp and src 10.0.1.10" r c-voip ping -c 3 -W 1 10.0.20.10
+    check "voip  ICMP  -> EF" 0xb8 "${TOS[0]}"
+    capture 1 "icmp and src 10.0.1.10" r c-voip ping -c 3 -W 1 -Q 0x20 10.0.20.10
+    check "voip  client-set CS1 is overwritten -> EF" 0xb8 "${TOS[0]}"
+    capture 1 "udp and dst port 5301" r c-video iperf3 -c 10.0.20.20 -p 5301 -u -b 1M -t 2
+    check "video UDP   -> AF31" 0x68 "${TOS[0]}"
+    capture 1 "tcp and dst port 5301 and src 10.0.1.30" r c-bulk iperf3 -c 10.0.20.30 -p 5301 -t 2
+    check "bulk  TCP   -> BE" 0x0 "${TOS[0]}"
+fi
+
+# --- ml: each flow goes as BE while the model observes it, then gets its class
+if [ "$WHAT" != rules ]; then
+    echo "--- ml"
+    if ! docker exec vnf-cls test -f /app/ml/model.joblib; then
+        echo "SKIP ml checks: no model in the image (sudo docker compose build cls, remove the old"\
+" vnf-* containers and press play again)"
+    else
+        ok "model present in the image"
+        before=$(docker exec vnf-cls pgrep -f "vnf.py daemon")
+        docker exec vnf-cls python3 /app/vnf.py mode ml > /dev/null
+        sleep 1
+        after=$(docker exec vnf-cls pgrep -f "vnf.py daemon")
+        [ "$(docker exec vnf-cls python3 /app/vnf.py mode)" = "ml" ] && ok "mode is ml" || fail "mode is not ml"
+        [ -n "$before" ] && [ "$before" = "$after" ] && ok "switched live (daemon pid $after kept)" \
+            || fail "daemon restarted or not running (pid before '$before', after '$after')"
+
+        # 12 packets per flow: the first is still being observed, the last one is past the window
+        capture 12 "icmp and src 10.0.1.10" r c-voip ping -c 15 -i 0.05 -W 1 10.0.20.10
+        check "voip  ICMP  first packet, observed -> BE" 0x0 "${TOS[0]}"
+        check "voip  ICMP  after the window       -> EF" 0xb8 "${TOS[-1]}"
+        capture 12 "udp and dst port 5301" r c-video iperf3 -c 10.0.20.20 -p 5301 -u -b 2M -t 3
+        check "video UDP   first packet, observed -> BE" 0x0 "${TOS[0]}"
+        check "video UDP   after the window       -> AF31" 0x68 "${TOS[-1]}"
+        capture 12 "tcp and dst port 5301 and src 10.0.1.30" r c-bulk iperf3 -c 10.0.20.30 -p 5301 -t 3
+        check "bulk  TCP   after the window       -> BE" 0x0 "${TOS[-1]}"
+        echo; docker exec vnf-cls tail -n 6 /var/log/cls.log
+    fi
+fi
 
 r srv-video pkill iperf3
 r srv-bulk  pkill iperf3
 echo; docker exec vnf-cls python3 /app/vnf.py status
+docker exec vnf-cls python3 /app/vnf.py mode rules > /dev/null

@@ -1,2 +1,5 @@
 /results/*
 *.pyc
+vnfs/cls/ml/model.joblib*
+vnfs/cls/ml/model.meta.json
+__pycache__/

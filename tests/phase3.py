@@ -95,7 +95,7 @@ def main():
     ap.add_argument("--bulk-streams", nargs="+", type=int, default=[4], dest="bulk_streams")
     ap.add_argument("--bulk-ceil", nargs="+", default=["default"], dest="bulk_ceil",
                     help="policer ceiling for bulk (>= 9mbit); only affects the 'on' scenario")
-    ap.add_argument("--cls-mode", nargs="+", default=["rules"], choices=["rules", "ml"], dest="cls_mode",
+    ap.add_argument("--cls-mode", nargs="+", default=["rules"], choices=["rules", "ml", "collect"], dest="cls_mode",
                     help="classifier mode; only affects the 'on' scenario")
     ap.add_argument("--voip-interval", nargs="+", default=["0.2"], dest="voip_interval",
                     help="seconds between VoIP pings (0.01 = ~100 packets/s)")

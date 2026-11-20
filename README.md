@@ -24,7 +24,7 @@ Routing is static, set by the orchestrator.
 | # | VNF | Function | How |
 | --- | --- | --- | --- |
 | 1 | `vnf-fw` | Access control | Stateful whitelist with `iptables`, everything else dropped; allowed/dropped flows logged through NFLOG |
-| 2 | `vnf-cls` | Classification | Scapy reads the first packet of each flow via NFQUEUE; the decision is saved with `CONNMARK` and `iptables` sets the DSCP on the rest of the flow |
+| 2 | `vnf-cls` | Classification | Scapy gets new flows via NFQUEUE and decides the class, either by rules or with an ML model (see below); the decision is saved with `CONNMARK` and `iptables` sets the DSCP on the rest of the flow |
 | 3 | `vnf-pol` | Policing and scheduling | `tc` HTB at 19 Mbit/s with a guaranteed rate, ceiling and priority per class (`pfifo` for VoIP/video, `fq_codel` for bulk) |
 | 4 | `vnf-mon` | Monitoring | Counts packets per DSCP class; exports to Prometheus (`:9100`) / Grafana and writes a CSV every second |
 
@@ -37,6 +37,27 @@ The policer shapes slightly below the 20 Mbit/s link so the queue forms in `vnf-
 | Bulk | best effort | `iperf3` TCP | DF (0) | 9 / 19 Mbit/s | 2 |
 
 The bulk ceiling can be lowered with `BULK_CEIL` (e.g. `12mbit`) to police it harder.
+
+## ML classification
+
+Besides the rules (ICMP → VoIP, UDP → video, TCP → bulk), the classifier has an ML mode that looks at how a flow behaves instead of its protocol or ports. It watches the first 8 packets of each flow (or less if the flow is slow, after 1 s) and a scikit-learn decision tree picks the class from 13 features: protocol, packet sizes, inter-arrival times and rate. IPs and ports are not used. While a flow is being watched its packets go as best effort; after that it gets its DSCP like in rules mode.
+
+The mode can be switched while traffic is running, without restarting the VNF:
+
+```bash
+docker exec vnf-cls python3 /app/vnf.py mode ml        # or rules / collect
+```
+
+The default model is trained when the image is built, on synthetic flows (RTP codecs, pings, iperf3, frame-based video, TCP uploads, QUIC-like bulk, control connections). We compared a decision tree with a random forest on 3000 flows:
+
+| Model | Holdout accuracy | 5-fold CV | Time per flow |
+| --- | ---: | ---: | ---: |
+| Decision tree | 99.9 % | 99.4 % ± 0.1 | ~0.17 ms |
+| Random forest | 99.9 % | 99.9 % ± 0.1 | ~10 ms |
+
+We kept the tree: same accuracy, ~60× faster, and it can be printed as rules.
+
+The model can also be retrained with real traffic from the lab. In `collect` mode the VNF uses the rules but records every flow with its real class (taken from the server it goes to), and `vnf.py train` retrains with that data; the VNF loads the new model by itself. `tests/cls_accuracy.py` runs the same random traffic in rules and ML mode and compares accuracy, precision and recall per class. More details in [vnfs/cls/ml/README.md](vnfs/cls/ml/README.md) (in Portuguese).
 
 ## Results
 
@@ -91,7 +112,7 @@ Each VNF is controlled the same way:
 
 ```bash
 docker exec vnf-fw  python3 /app/vnf.py on | off | status | logs
-docker exec vnf-cls python3 /app/vnf.py on | off | status | logs
+docker exec vnf-cls python3 /app/vnf.py on [rules|ml|collect] | off | status | mode [rules|ml|collect] | train | logs
 docker exec vnf-pol python3 /app/vnf.py on | off | status | logs
 docker exec vnf-mon python3 /app/vnf.py on | off | status | metrics | logs
 ```
@@ -102,7 +123,7 @@ Grafana is at <http://localhost:3000>.
 
 ```bash
 sudo bash vnfs/fw/test.sh      # isolated test of each VNF
-sudo bash vnfs/cls/test.sh
+sudo bash vnfs/cls/test.sh     # rules + ml (or just: rules | ml)
 sudo bash vnfs/pol/test.sh
 sudo bash vnfs/mon/test.sh
 
@@ -113,6 +134,7 @@ sudo python3 tests/phase3.py --name wan  --delay 0ms 40ms --jitter 0ms 15ms --lo
 sudo python3 tests/phase3.py --name tune --scenarios on --bulk-ceil 10mbit 14mbit 19mbit
 
 sudo python3 tests/traffic.py --duration 300 --seed 42 --atk  # random traffic
+sudo python3 tests/cls_accuracy.py --duration 300 --seed 42   # rules vs ML accuracy
 ```
 
 Results are saved in `results/<name>/` (CSV summaries, graphs and raw ping/iperf3/mon data).
@@ -126,7 +148,8 @@ topology/chain.xml       CORE topology
 orchestrator/qosi.py     routes: chain | bypass
 vnfs/base/               shared base image
 vnfs/fw|cls|pol|mon/     each VNF: vnf.py, test.sh, Dockerfile
-tests/                   scenario runner, sweeps, random traffic
+vnfs/cls/ml/             ML classifier: features, synthetic flows, training, model loading
+tests/                   scenario runner, sweeps, random traffic, classifier accuracy
 docs/                    diagram, Gantt, screenshots, graphs, progress report
 ```
 
