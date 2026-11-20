@@ -67,6 +67,14 @@ chmod +x vnfs/*/*.sh 2>/dev/null
 mkdir -p results
 
 echo "== 7. Docker images (VNFs, Prometheus, Grafana)"
+if docker info >/dev/null 2>&1 && ! ip link show docker0 >/dev/null 2>&1; then
+    # CORE can delete Docker's bridge; builds then fail with "network bridge not found"
+    if [ "$(ps -p 1 -o comm= 2>/dev/null)" = "systemd" ]; then systemctl restart docker
+    else service docker restart >/dev/null 2>&1; fi
+    sleep 2
+    ip link show docker0 >/dev/null 2>&1 && ok "docker0 bridge was missing: restarted docker" \
+        || warn "docker0 bridge missing even after restarting docker"
+fi
 if docker info >/dev/null 2>&1; then
     docker compose build base >/dev/null 2>&1 && docker compose build 2>&1 | tail -n 3
     docker images --format '{{.Repository}}' | grep -c '^qosi-' | xargs -I{} echo "  qosi images built: {} (expected 5)"

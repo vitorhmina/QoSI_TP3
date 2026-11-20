@@ -1,53 +1,52 @@
 name: qosi
 
-x-vnf: &vnf
-  entrypoint: ["true"]     # CORE runs the real containers; these only trigger the build
-  restart: "no"
-  network_mode: none       # no Docker network needed, so a deleted bridge cannot break "up"
+# The VNF images (base, fw, cls, pol, mon) are only BUILT here; CORE runs the real containers.
+# base sets what they all share, and fw/cls/pol/mon take it with "extends: base":
+#   entrypoint ["true"]   -> "up" starts the container and it exits right away
+#   network_mode: none    -> it needs no Docker network
+# If a build fails with "network bridge not found", CORE deleted Docker's docker0 bridge:
+# sudo systemctl restart docker (setup.sh does this automatically).
 
 services:
   base:
-    <<: *vnf
+    image: qosi-base
     build:
       context: ./vnfs/base
-      network: host                   # build steps use the host network, not docker0 (CORE can delete it)
-    image: qosi-base
+    entrypoint: ["true"]
+    restart: "no"
+    network_mode: none
 
   fw:
-    <<: *vnf
+    extends: base
+    image: qosi-fw
     build:
       context: ./vnfs/fw
-      network: host
       additional_contexts:
-        qosi-base: "service:base"     # makes "FROM qosi-base" use the base build above
-    image: qosi-fw
+        qosi-base: "service:base"     # "FROM qosi-base" uses the base image built above
 
   cls:
-    <<: *vnf
+    extends: base
+    image: qosi-cls
     build:
       context: ./vnfs/cls
-      network: host
       additional_contexts:
         qosi-base: "service:base"
-    image: qosi-cls
 
   pol:
-    <<: *vnf
+    extends: base
+    image: qosi-pol
     build:
       context: ./vnfs/pol
-      network: host
       additional_contexts:
         qosi-base: "service:base"
-    image: qosi-pol
 
   mon:
-    <<: *vnf
+    extends: base
+    image: qosi-mon
     build:
       context: ./vnfs/mon
-      network: host
       additional_contexts:
         qosi-base: "service:base"
-    image: qosi-mon
 
   prometheus:
     image: prom/prometheus
