@@ -109,34 +109,38 @@ sudo docker compose build cls
 
 ## Results
 
-Run with `tests/run_tests.py`: VoIP pings every 0.2 s for 35 s, 8 Mbit/s UDP video for 30 s, and 4 TCP bulk streams starting at 5 s, which saturates the 20 Mbit/s link. "Off" is the same path with the VNFs disabled (the bypass gives the same numbers).
+Measured with `tests/run_tests.py --runs 3`: a VoIP call (G.711-like, 200-byte packets every 20 ms) for 35 s, an 8 Mbit/s UDP video stream for 30 s, and 4 TCP bulk transfers starting at 5 s, which saturates the 20 Mbit/s link. The same load goes through four setups: `bypass` (direct link, no VNFs), `off` (chain with the VNFs off), `nopol` (firewall and classifier on, policer off) and `on` (everything on). Values are mean ± standard deviation over 3 runs.
 
-| Metric | VNFs off | VNFs on |
-| --- | ---: | ---: |
-| Attacker blocked | no | yes |
-| VoIP RTT avg | 278 ms | 21.1 ms |
-| VoIP RTT p95 | 600 ms | 22.0 ms |
-| VoIP jitter | 11.9 ms | 0.44 ms |
-| VoIP loss | 0 % | 0 % |
-| Video throughput | 8.0 Mbit/s | 8.0 Mbit/s |
-| Video loss | 0.09 % | 0 % |
-| Bulk throughput | 9.4 Mbit/s | 10.1 Mbit/s |
+| Metric | bypass | off | nopol | on |
+| --- | ---: | ---: | ---: | ---: |
+| Attacker blocked | no | no | yes | yes |
+| VoIP RTT avg (ms) | 272.6 ± 6.5 | 271.7 ± 12.2 | 274.3 ± 6.6 | **21.2 ± 0.1** |
+| VoIP RTT p95 (ms) | 594.0 ± 4.0 | 595.3 ± 8.1 | 598.7 ± 2.1 | **22.1 ± 0.1** |
+| VoIP jitter (ms) | 4.29 ± 0.46 | 4.82 ± 0.57 | 4.47 ± 0.07 | **0.46 ± 0.03** |
+| VoIP loss (%) | 0.11 ± 0.07 | 0.11 ± 0.10 | 0.13 ± 0.07 | 0.06 ± 0.00 |
+| Video throughput (Mbit/s) | 8.00 | 8.00 | 8.00 | 8.00 |
+| Video loss (%) | 0.10 ± 0.06 | 0.11 ± 0.05 | 0.14 ± 0.04 | **0.00** |
+| Bulk throughput (Mbit/s) | 10.1 ± 1.0 | 10.7 ± 0.7 | 10.2 ± 1.4 | 9.2 ± 1.4 |
+| VNF CPU (% of one core) | 0.3 | 7.2 ± 0.6 | 9.4 ± 0.9 | 12.8 ± 0.7 |
+| VNF memory (MB) | 41 | 41 | 126 | 138 |
 
 ![VoIP latency under load](docs/results/voip_latency.png)
 
-Without the VNFs, VoIP shares the queue with bulk TCP and its RTT goes up to ~600 ms as soon as the bulk streams start. With the chain on it stays around 21 ms the whole time.
+As soon as the bulk transfers start (t = 5 s), VoIP waits behind them in one shared queue and its RTT climbs to ~600 ms, in every setup except `on`, where it stays at ~21 ms. `nopol` is as bad as no VNFs at all: the classifier marks VoIP as EF correctly, but nothing on the path acts on the marking. Classification only pays off together with the scheduler. The price is about 1 Mbit/s of bulk throughput (~10 %), and going through the four extra hops costs no measurable latency (`off` vs `bypass`).
 
 ![Comparison](docs/results/comparison.png)
 
-With 16 Mbit/s of video (more than its share) VoIP is still protected, but video takes the losses:
+![VNF CPU use](docs/results/resources.png)
+
+The monitor is the most expensive VNF (7–10 % of a core): it counts every packet in Python, while the firewall, classifier and policer do their per-packet work in the kernel (iptables, `tc`) and use about 1 % each. It is on in every setup because it is the measuring point. `docker stats` only counts each container's own processes, not packet forwarding in the kernel. The extra memory with `nopol`/`on` is mostly the classifier's Python libraries (Scapy, scikit-learn).
+
+With 16 Mbit/s of video (more than its share) VoIP is still protected, but video takes the losses (earlier single run, VoIP every 0.2 s; `tests/sweep.py --name load --video 8M 16M` repeats it):
 
 | 16 Mbit/s video | VNFs off | VNFs on |
 | --- | ---: | ---: |
 | VoIP RTT avg | 362 ms | 21.2 ms |
 | Video loss | 0.3 % | 25.4 % |
 | Bulk throughput | 3.6 Mbit/s | 8.3 Mbit/s |
-
-Single runs; use `--runs N` to average several.
 
 ## How to run
 

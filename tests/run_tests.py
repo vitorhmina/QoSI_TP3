@@ -4,10 +4,12 @@
   nopol   chain, fw + cls on, policer off       on     chain, all VNFs on
 Load: VoIP (G.711-like: 200 B every 20 ms), 8 Mbit/s UDP video (HD stream), 4 TCP bulk streams
 starting 5 s later, which saturates the 20 Mbit/s bottleneck.
+CPU and memory of the VNF containers are sampled during the load (docker stats), and with --runs N
+every metric is reported as mean and standard deviation across the runs.
 Usage: sudo python3 tests/run_tests.py [--name NAME] [--runs N] [--scenarios bypass off nopol on]
 Results: results/<name>/<scenario>/run<k>/ plus summary.csv and graphs in results/<name>/
 """
-import argparse, csv, json, os, re, subprocess, sys, time
+import argparse, csv, json, os, re, statistics, subprocess, sys, threading, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "orchestrator"))
@@ -25,6 +27,50 @@ SCENARIOS = {   # name -> (path, VNFs turned on; the others are off)
     "on":     ("chain", VNFS),
 }
 NAN = float("nan")
+CONTAINERS = ("fw", "cls", "pol", "mon")      # vnf-<name>, all sampled for CPU and memory
+KEYS = ["rtt_avg", "rtt_p95", "rtt_max", "jitter", "voip_loss", "video_mbps", "video_jitter",
+        "video_loss", "bulk_mbps", "bulk_retr", "vnf_cpu", "vnf_mem_mb"] + [f"{v}_cpu" for v in CONTAINERS]
+
+
+def mem_mb(text):
+    """'12.5MiB' -> 12.5 (MiB)"""
+    m = re.match(r"([\d.]+)\s*([A-Za-z]+)", text.strip())
+    units = {"B": 1 / 2**20, "KIB": 1 / 1024, "MIB": 1, "GIB": 1024,
+             "KB": 1e3 / 2**20, "MB": 1e6 / 2**20, "GB": 1e9 / 2**20}
+    return float(m[1]) * units.get(m[2].upper(), NAN) if m else NAN
+
+
+class Resources:
+    """Samples CPU and memory of the VNF containers (docker stats) while a run is going."""
+    def __init__(self, path):
+        self.path, self.stop = path, threading.Event()
+        self.thread = threading.Thread(target=self.loop, daemon=True)
+
+    def __enter__(self):
+        self.thread.start()
+        return self
+
+    def __exit__(self, *exc):
+        self.stop.set()
+        self.thread.join(timeout=10)
+
+    def loop(self):
+        with open(self.path, "w") as f:
+            f.write("time,vnf,cpu_pct,mem_mb\n")
+            while not self.stop.is_set():
+                r = subprocess.run(["docker", "stats", "--no-stream", "--format",
+                                    "{{.Name}},{{.CPUPerc}},{{.MemUsage}}",
+                                    *[f"vnf-{v}" for v in CONTAINERS]], capture_output=True, text=True)
+                now = time.time()
+                for line in r.stdout.splitlines():
+                    try:
+                        name, cpu, mem = line.split(",", 2)
+                        f.write(f"{now:.1f},{name.replace('vnf-', '')},{float(cpu.rstrip('%')):.2f},"
+                                f"{mem_mb(mem.split('/')[0]):.1f}\n")
+                    except ValueError:
+                        pass
+                f.flush()
+                self.stop.wait(0.5)
 
 
 def vcmd(node):
@@ -55,15 +101,16 @@ def run_once(scn, out):
     print("  atk ->", "blocked" if r.returncode else "passed")
     vnf("mon", "on")                                                  # resets mon.csv
     time.sleep(3)
-    procs = [start("c-voip", f"{out}/ping.txt", "ping", "-s", VOIP_SIZE, "-i", VOIP_INTERVAL,
-                   "-w", str(DUR_PING), "-D", "10.0.20.10"),
-             start("c-video", f"{out}/video.json", "iperf3", "-c", "10.0.20.20", "-p", PORT,
-                   "-u", "-b", VIDEO_BW, "-t", str(DUR_VIDEO), "-J")]
-    time.sleep(BULK_DELAY)
-    procs.append(start("c-bulk", f"{out}/bulk.json", "iperf3", "-c", "10.0.20.30", "-p", PORT,
-                       "-t", str(DUR_BULK), "-P", "4", "-J"))
-    for p in procs:
-        p.wait()
+    with Resources(f"{out}/resources.csv"):
+        procs = [start("c-voip", f"{out}/ping.txt", "ping", "-s", VOIP_SIZE, "-i", VOIP_INTERVAL,
+                       "-w", str(DUR_PING), "-D", "10.0.20.10"),
+                 start("c-video", f"{out}/video.json", "iperf3", "-c", "10.0.20.20", "-p", PORT,
+                       "-u", "-b", VIDEO_BW, "-t", str(DUR_VIDEO), "-J")]
+        time.sleep(BULK_DELAY)
+        procs.append(start("c-bulk", f"{out}/bulk.json", "iperf3", "-c", "10.0.20.30", "-p", PORT,
+                           "-t", str(DUR_BULK), "-P", "4", "-J"))
+        for p in procs:
+            p.wait()
     time.sleep(2)
     subprocess.run(["docker", "cp", "vnf-mon:/var/log/mon.csv", f"{out}/mon.csv"], capture_output=True)
 
@@ -93,25 +140,58 @@ def summarize(d):
     except Exception:
         print(f"  WARNING: could not parse {d}/bulk.json")
     s["atk_blocked"] = "RESULT: blocked" in open(f"{d}/atk.txt").read()
+    s.update(resources(d))
     return s, t, rtt
 
 
+def resources(d):
+    """Average CPU (%, of one core) per VNF and in total, and total memory, during the load."""
+    cpu = {v: [] for v in CONTAINERS}
+    mem = {v: [] for v in CONTAINERS}
+    try:
+        for r in csv.DictReader(open(f"{d}/resources.csv")):
+            if r["vnf"] in cpu:
+                cpu[r["vnf"]].append(float(r["cpu_pct"]))
+                mem[r["vnf"]].append(float(r["mem_mb"]))
+    except (OSError, ValueError, KeyError):
+        pass
+    avg = lambda xs: sum(xs) / len(xs) if xs else NAN
+    out = {f"{v}_cpu": avg(cpu[v]) for v in CONTAINERS}
+    out["vnf_cpu"] = sum(out[f"{v}_cpu"] for v in CONTAINERS)
+    out["vnf_mem_mb"] = sum(avg(mem[v]) for v in CONTAINERS)
+    return out
+
+
+def mean_std(values):
+    """Mean and sample standard deviation (0 with a single run)."""
+    m = sum(values) / len(values)
+    return m, (statistics.stdev(values) if len(values) > 1 else 0.0)
+
+
 def report(res, base):
-    keys = ["rtt_avg", "rtt_p95", "rtt_max", "jitter", "voip_loss", "video_mbps", "video_jitter",
-            "video_loss", "bulk_mbps", "bulk_retr"]
-    mean = {scn: {k: sum(r[0][k] for r in runs) / len(runs) for k in keys} for scn, runs in res.items()}
-    for scn, runs in res.items():
-        mean[scn]["atk_blocked"] = all(r[0]["atk_blocked"] for r in runs)
+    keys = KEYS
     names = list(res)
-    print("\n" + " " * 28 + "".join(f"{n:>10}" for n in names))
+    mean, std = {}, {}
+    for scn, runs in res.items():
+        mean[scn], std[scn] = {}, {}
+        for k in keys:
+            mean[scn][k], std[scn][k] = mean_std([r[0][k] for r in runs])
+        mean[scn]["atk_blocked"] = all(r[0]["atk_blocked"] for r in runs)
+    runs_n = len(next(iter(res.values())))
+    print(f"\n(mean ± std over {runs_n} run(s); cpu = % of one core, averaged during the load)")
+    print(" " * 16 + "".join(f"{n:>18}" for n in names))
     for k in ["atk_blocked"] + keys:
-        print(f"{k:28}" + "".join(f"{mean[n][k]:>10.2f}" if k != "atk_blocked"
-                                    else f"{'yes' if mean[n][k] else 'no':>10}" for n in names))
+        if k == "atk_blocked":
+            cells = [f"{'yes' if mean[n][k] else 'no':>18}" for n in names]
+        else:
+            cells = [f"{mean[n][k]:>11.2f} ± {std[n][k]:<4.2f}" for n in names]
+        print(f"{k:16}" + "".join(cells))
     with open(f"{base}/summary.csv", "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["metric"] + names)
-        for k in ["atk_blocked"] + keys:
-            w.writerow([k] + [mean[n][k] for n in names])
+        w.writerow(["metric"] + [c for n in names for c in (n, f"{n}_std")])
+        w.writerow(["atk_blocked"] + [c for n in names for c in (mean[n]["atk_blocked"], "")])
+        for k in keys:
+            w.writerow([k] + [c for n in names for c in (round(mean[n][k], 4), round(std[n][k], 4))])
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -125,11 +205,23 @@ def report(res, base):
             ax.plot([x - t[0] for x in t], rtt, label=scn)
     ax.set(xlabel="time (s)", ylabel="VoIP RTT (ms, log)", yscale="log", title="VoIP latency under load")
     ax.legend(); fig.tight_layout(); fig.savefig(f"{base}/voip_latency.png", dpi=130)
-    fig, axs = plt.subplots(1, 4, figsize=(14, 3.5))
+    fig, axs = plt.subplots(1, 5, figsize=(17, 3.5))
     for ax, (k, title) in zip(axs, [("rtt_avg", "VoIP RTT avg (ms)"), ("jitter", "VoIP jitter (ms)"),
-                                    ("bulk_mbps", "Bulk (Mbit/s)"), ("video_loss", "Video loss (%)")]):
-        ax.bar(names, [mean[n][k] for n in names]); ax.set_title(title)
+                                    ("bulk_mbps", "Bulk (Mbit/s)"), ("video_loss", "Video loss (%)"),
+                                    ("vnf_cpu", "VNF CPU (% of a core)")]):
+        ax.bar(names, [mean[n][k] for n in names], yerr=[std[n][k] for n in names], capsize=4)
+        ax.set_title(title)
+    fig.suptitle(f"mean ± std over {runs_n} run(s)", fontsize=9)
     fig.tight_layout(); fig.savefig(f"{base}/comparison.png", dpi=130)
+    fig, ax = plt.subplots(figsize=(8, 4))             # where the CPU goes, per VNF and scenario
+    bottom = [0.0] * len(names)
+    for v in CONTAINERS:
+        vals = [mean[n][f"{v}_cpu"] for n in names]
+        vals = [0.0 if x != x else x for x in vals]   # NaN (no samples) -> 0
+        ax.bar(names, vals, bottom=bottom, label=f"vnf-{v}")
+        bottom = [b + x for b, x in zip(bottom, vals)]
+    ax.set(ylabel="CPU (% of one core)", title="VNF CPU use during the load")
+    ax.legend(); fig.tight_layout(); fig.savefig(f"{base}/resources.png", dpi=130)
     try:
         rows = list(csv.DictReader(open(f"{base}/on/run1/mon.csv")))
         x = [int(r["time"]) - int(rows[0]["time"]) for r in rows]
